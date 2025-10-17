@@ -1,122 +1,354 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'theme.dart';
+import 'screens/dashboard_page.dart';
+import 'screens/chat_page.dart';
+import 'screens/resources_page.dart';
+import 'screens/profile_page.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const BeaconApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class BeaconApp extends StatefulWidget {
+  const BeaconApp({super.key});
 
-  // This widget is the root of your application.
+  @override
+  State<BeaconApp> createState() => _BeaconAppState();
+}
+
+class _BeaconAppState extends State<BeaconApp> {
+  bool isDarkMode = false;
+
+  void toggleTheme() => setState(() => isDarkMode = !isDarkMode);
+
+  ThemeData get currentTheme => isDarkMode ? darkTheme() : lightTheme();
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+    return MaterialApp.router(
+      title: 'BEACON',
+      theme: currentTheme,
+      routerConfig: _router,
+      debugShowCheckedModeBanner: false,
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+final GoRouter _router = GoRouter(
+  initialLocation: '/',
+  routes: [
+    GoRoute(
+      path: '/',
+      name: 'landing',
+      builder: (context, state) => const LandingPage(),
+    ),
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
+    // ShellRoute provides a persistent scaffold with BottomNavigationBar
+    ShellRoute(
+      builder: (context, state, child) {
+        return HomeShell(child: child);
+      },
+      routes: [
+        GoRoute(
+          path: '/dashboard',
+          name: 'dashboard',
+          builder: (context, state) {
+            final mode = state.uri.queryParameters['mode'];
+            return DashboardPage(mode: mode);
+          },
+        ),
+        GoRoute(
+          path: '/chat',
+          name: 'chat',
+          builder: (context, state) => const ChatPage(),
+        ),
+        GoRoute(
+          path: '/resources',
+          name: 'resources',
+          builder: (context, state) => const ResourcesPage(),
+        ),
+        GoRoute(
+          path: '/profile',
+          name: 'profile',
+          builder: (context, state) => const ProfilePage(),
+        ),
+      ],
+    ),
+  ],
+);
 
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+// ---------------------------
+// Helper widget: ThemeToggleButton
+// ---------------------------
+class ThemeToggleButton extends StatelessWidget {
+  const ThemeToggleButton({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  Widget build(BuildContext context) {
+    // Find the BeaconApp state to toggle the theme
+    final appState = context.findAncestorStateOfType<_BeaconAppState>();
+    final isDark =
+        appState?.isDarkMode ?? Theme.of(context).brightness == Brightness.dark;
+
+    return IconButton(
+      tooltip: isDark ? 'Switch to light' : 'Switch to dark',
+      icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
+      onPressed: () {
+        if (appState != null) appState.toggleTheme();
+      },
+    );
+  }
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+// ---------------------------
+// Landing Page
+// ---------------------------
+class LandingPage extends StatelessWidget {
+  const LandingPage({super.key});
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  void _startNew(BuildContext context) {
+    // Navigate to chat in "start" mode
+    context.go('/chat?mode=start');
+  }
+
+  void _joinExisting(BuildContext context) {
+    // Navigate to dashboard in "join" mode
+    context.go('/dashboard?mode=join');
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: const Text('BEACON'),
+        centerTitle: true,
+        actions: const [
+          // Theme toggle in Landing AppBar
+          ThemeToggleButton(),
+        ],
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = constraints.maxWidth > 600;
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: isWide
+                    ? _buildHorizontal(context)
+                    : _buildVertical(context),
+              ),
+            );
+          },
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+    );
+  }
+
+  Widget _buildVertical(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.wifi_tethering, size: 96),
+        const SizedBox(height: 12),
+        const Text(
+          'BEACON',
+          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Offline peer-to-peer emergency communication',
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 24),
+        ElevatedButton.icon(
+          onPressed: () => _joinExisting(context),
+          icon: const Icon(Icons.login),
+          label: const Padding(
+            padding: EdgeInsets.symmetric(vertical: 14.0, horizontal: 8.0),
+            child: Text('Join Existing Communication'),
+          ),
+          style: ElevatedButton.styleFrom(
+            minimumSize: const Size.fromHeight(56),
+          ),
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: () => _startNew(context),
+          icon: const Icon(Icons.add_to_queue),
+          label: const Padding(
+            padding: EdgeInsets.symmetric(vertical: 14.0, horizontal: 8.0),
+            child: Text('Start New Communication'),
+          ),
+        ),
+        const SizedBox(height: 24),
+        const Text(
+          'Voice commands supported (planned)',
+          style: TextStyle(fontSize: 12),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHorizontal(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Expanded(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Icon(Icons.wifi_tethering, size: 96),
+              SizedBox(height: 8),
+              Text(
+                'BEACON',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 6),
+              Text(
+                'Offline peer-to-peer emergency communication',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 24),
+        Expanded(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ElevatedButton.icon(
+                onPressed: () => _joinExisting(context),
+                icon: const Icon(Icons.login),
+                label: const Padding(
+                  padding: EdgeInsets.symmetric(
+                    vertical: 14.0,
+                    horizontal: 8.0,
+                  ),
+                  child: Text('Join Existing Communication'),
+                ),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(56),
+                ),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () => _startNew(context),
+                icon: const Icon(Icons.add_to_queue),
+                label: const Padding(
+                  padding: EdgeInsets.symmetric(
+                    vertical: 14.0,
+                    horizontal: 8.0,
+                  ),
+                  child: Text('Start New Communication'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------
+// HomeShell with Bottom Navigation (now with AppBar + Theme toggle)
+// ---------------------------
+class HomeShell extends StatefulWidget {
+  final Widget child;
+  const HomeShell({super.key, required this.child});
+
+  @override
+  State<HomeShell> createState() => _HomeShellState();
+}
+
+class _HomeShellState extends State<HomeShell> {
+  final Map<String, int> _locationToIndex = {
+    '/dashboard': 0,
+    '/chat': 1,
+    '/resources': 2,
+    '/profile': 3,
+  };
+
+  final Map<int, String> _indexToTitle = {
+    0: 'Dashboard',
+    1: 'Chat',
+    2: 'Resources',
+    3: 'Profile',
+  };
+
+  int _currentIndex = 0;
+
+  void _onTap(int index) {
+    setState(() => _currentIndex = index);
+    switch (index) {
+      case 0:
+        context.go('/dashboard');
+        break;
+      case 1:
+        context.go('/chat');
+        break;
+      case 2:
+        context.go('/resources');
+        break;
+      case 3:
+        context.go('/profile');
+        break;
+    }
+  }
+
+  String _titleForLocation(String loc) {
+    for (final entry in _locationToIndex.entries) {
+      if (loc.startsWith(entry.key)) {
+        return _indexToTitle[entry.value] ?? 'BEACON';
+      }
+    }
+    return 'BEACON';
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final loc = GoRouterState.of(context).uri.toString();
+    for (final entry in _locationToIndex.entries) {
+      if (loc.startsWith(entry.key)) {
+        _currentIndex = entry.value;
+        break;
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = GoRouterState.of(context).uri.toString();
+    final title = _titleForLocation(loc);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(title),
+        actions: const [
+          ThemeToggleButton(), // shared toggle here so all inner pages show it
+        ],
+      ),
+      body: widget.child,
+      bottomNavigationBar: BottomNavigationBar(
+        type: BottomNavigationBarType.fixed,
+        currentIndex: _currentIndex,
+        onTap: _onTap,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.dashboard),
+            label: 'Dashboard',
+          ),
+          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble), label: 'Chat'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.local_hospital),
+            label: 'Resources',
+          ),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+        ],
+      ),
     );
   }
 }

@@ -1,16 +1,26 @@
-# beacon_project
+# BEACON - Broadcast Emergency Alerts Community Offline Network 📡🚨
 
-A new Flutter project.
+**BEACON** is a disaster response mobile app that enables **offline peer-to-peer emergency communication** when cellular networks or internet fail.  
+Built as a **mobile programming course project** using **Flutter**, **GoRouter**, etc...
 
-## Getting Started
+---
 
-This project is a starting point for a Flutter application.
+## 🛠️ Features
 
-A few resources to get you started if this is your first Flutter project:
+- **Landing Page with 2 main actions**:
+  - Join an existing emergency communication
+  - Start a new emergency communication
+- **Dashboard** showing nearby connected devices
+- **Private Chat** between users
+- **Resource Sharing** for medical supplies, food, and shelter
+- **User Profile & Emergency Contact setup**
+- **Bottom Navigation Bar** for easy access between pages
+- **Theme support**: Light / Dark mode toggle
+- **Responsive UI** for portrait, landscape, phones, and tablets
+- **Planned voice command support** for hands-free operation
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+---
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## 📁 Project Structure
+
+- **TBA**

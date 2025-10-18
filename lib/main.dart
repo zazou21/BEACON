@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:beacon_project/theme.dart';
 import 'package:beacon_project/screens/resources_page.dart';
+import 'screens/dashboard_page.dart';
 
 void main() => runApp(const MyApp());
 

@@ -35,6 +35,7 @@ android/local.properties
 android/key.properties
 
 # Build artifacts
+**/build/
 /build/
 android/**/build/
 ios/**/build/

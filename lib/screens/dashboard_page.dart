@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'chat_page.dart';
+
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -68,7 +70,12 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   void chat(String mac) {
-    print('Navigate to chat with $mac');
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChatPage(macAddress: mac),
+      ),
+    );
   }
 
   void quickMessage(String deviceName) {
@@ -199,8 +206,4 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
     );
   }
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> Korkor

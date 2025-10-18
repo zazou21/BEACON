@@ -1,14 +1,10 @@
 import 'package:flutter/material.dart';
-<<<<<<< HEAD
 import 'package:go_router/go_router.dart';
 import 'theme.dart';
 import 'screens/dashboard_page.dart';
 import 'screens/chat_page.dart';
 import 'screens/resources_page.dart';
 import 'screens/profile_page.dart';
-=======
-import 'screens/chat_page.dart';
->>>>>>> ali
 
 void main() {
   runApp(const BeaconApp());
@@ -30,35 +26,11 @@ class _BeaconAppState extends State<BeaconApp> {
 
   @override
   Widget build(BuildContext context) {
-<<<<<<< HEAD
     return MaterialApp.router(
       title: 'BEACON',
       theme: currentTheme,
       routerConfig: _router,
       debugShowCheckedModeBanner: false,
-=======
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: ChatPage(macAddress: 'test')
->>>>>>> ali
     );
   }
 }
@@ -72,7 +44,7 @@ final GoRouter _router = GoRouter(
       builder: (context, state) => const LandingPage(),
     ),
 
-    // ShellRoute provides a persistent scaffold with BottomNavigationBar
+   
     ShellRoute(
       builder: (context, state, child) {
         return HomeShell(child: child);
@@ -82,14 +54,14 @@ final GoRouter _router = GoRouter(
           path: '/dashboard',
           name: 'dashboard',
           builder: (context, state) {
-            final mode = state.uri.queryParameters['mode'];
+          
             return DashboardPage();
           },
         ),
         GoRoute(
           path: '/chat',
           name: 'chat',
-          builder: (context, state) => const ChatPage(),
+          builder: (context, state) => ChatPage(macAddress: '',),
         ),
         GoRoute(
           path: '/resources',
@@ -137,12 +109,13 @@ class LandingPage extends StatelessWidget {
 
   void _startNew(BuildContext context) {
     // Navigate to chat in "start" mode
-    context.go('/chat?mode=start');
+    context.go('/dashboard?mode=join');
+   
   }
 
   void _joinExisting(BuildContext context) {
     // Navigate to dashboard in "join" mode
-    context.go('/dashboard?mode=join');
+    context.go( '/chat?mode=start');
   }
 
   @override
@@ -294,16 +267,16 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   final Map<String, int> _locationToIndex = {
     '/dashboard': 0,
-    '/chat': 1,
-    '/resources': 2,
-    '/profile': 3,
+    // '/chat': 1,
+    '/resources': 1,
+    '/profile': 2,
   };
 
   final Map<int, String> _indexToTitle = {
     0: 'Dashboard',
-    1: 'Chat',
-    2: 'Resources',
-    3: 'Profile',
+    // 1: 'Chat',
+    1: 'Resources',
+    2: 'Profile',
   };
 
   int _currentIndex = 0;
@@ -314,13 +287,13 @@ class _HomeShellState extends State<HomeShell> {
       case 0:
         context.go('/dashboard');
         break;
+      // case 1:
+      //   context.go('/chat');
+      //   break;
       case 1:
-        context.go('/chat');
-        break;
-      case 2:
         context.go('/resources');
         break;
-      case 3:
+      case 2:
         context.go('/profile');
         break;
     }
@@ -369,7 +342,7 @@ class _HomeShellState extends State<HomeShell> {
             icon: Icon(Icons.dashboard),
             label: 'Dashboard',
           ),
-          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble), label: 'Chat'),
+          // BottomNavigationBarItem(icon: Icon(Icons.chat_bubble), label: 'Chat'),
           BottomNavigationBarItem(
             icon: Icon(Icons.local_hospital),
             label: 'Resources',

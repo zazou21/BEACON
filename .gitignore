@@ -34,6 +34,16 @@ android/app/build/
 android/local.properties
 android/key.properties
 
+# Build artifacts
+/build/
+android/**/build/
+ios/**/build/
+linux/**/build/
+macos/**/build/
+windows/**/build/
+web/.dart_tool/     # web tool cache
+
+
 # iOS related
 **/Pods/
 **/Runner.xcworkspace/

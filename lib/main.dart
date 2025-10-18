@@ -71,7 +71,7 @@ final GoRouter _router = GoRouter(
         GoRoute(
           path: '/profile',
           name: 'profile',
-          builder: (context, state) => const ProfilePage(),
+          builder: (context, state) => const UserProfilePage(),
         ),
       ],
     ),

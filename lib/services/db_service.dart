@@ -21,6 +21,17 @@ class DBService {
       version: 1,
       onCreate: (db, version) async {
         await db.execute("""
+          CREATE TABLE devices (
+            uuid TEXT PRIMARY KEY,
+            deviceName TEXT,
+            endpointId TEXT,
+            status TEXT,
+            lastSeen INTEGER,
+            lastMessage TEXT,
+            createdAt INTEGER,
+            updatedAt INTEGER
+          );
+
         
         """);
       },

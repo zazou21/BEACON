@@ -10,6 +10,8 @@ void main() {
   runApp(const BeaconApp());
 }
 
+
+
 class BeaconApp extends StatefulWidget {
   const BeaconApp({super.key});
 
@@ -44,7 +46,6 @@ final GoRouter _router = GoRouter(
       builder: (context, state) => const LandingPage(),
     ),
 
-   
     ShellRoute(
       builder: (context, state, child) {
         return HomeShell(child: child);
@@ -54,14 +55,28 @@ final GoRouter _router = GoRouter(
           path: '/dashboard',
           name: 'dashboard',
           builder: (context, state) {
-          
-            return DashboardPage();
+            // Parse mode from query parameters
+            final modeParam = state.uri.queryParameters['mode'] ?? 'browse';
+            late final DashboardMode mode;
+            if (modeParam == 'start') {
+              mode = DashboardMode.ADVERTISING;
+            } else if (modeParam == 'join') {
+              mode = DashboardMode.BROWSING;
+            } else {
+              mode = DashboardMode.BROWSING; // default fallback
+            }
+            return DashboardPage(
+              mode: mode,
+              currentDeviceName:
+                  "YourDeviceNameHere", // pass the correct device name
+            );
           },
         ),
+
         GoRoute(
           path: '/chat',
           name: 'chat',
-          builder: (context, state) => ChatPage(macAddress: '',),
+          builder: (context, state) => ChatPage(macAddress: ''),
         ),
         GoRoute(
           path: '/resources',
@@ -110,12 +125,11 @@ class LandingPage extends StatelessWidget {
   void _startNew(BuildContext context) {
     // Navigate to chat in "start" mode
     context.go('/dashboard?mode=join');
-   
   }
 
   void _joinExisting(BuildContext context) {
     // Navigate to dashboard in "join" mode
-    context.go( '/chat?mode=start');
+    context.go('/dashboard?mode=start');
   }
 
   @override

@@ -1,53 +1,70 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:beacon_project/models/device.dart';
 import 'chat_page.dart';
+import 'package:beacon_project/services/beacon_connections.dart';
+import 'package:beacon_project/services/db_service.dart';
 
+enum DashboardMode { BROWSING, ADVERTISING }
+// final dbService = DBService();
 
 class DashboardPage extends StatefulWidget {
-  const DashboardPage({super.key});
+  final DashboardMode mode;
+  final String currentDeviceName;
+
+  const DashboardPage({
+    super.key,
+    required this.mode,
+    required this.currentDeviceName,
+  });
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  List<Map<String, dynamic>> devices = [
-    {
-      'name': "Galaxy S24",
-      'mac': "00:11:22:33:44:55",
-      'status': "Connected",
-      'lastSeen': DateTime.now().subtract(Duration(seconds: 5)),
-    },
-    {
-      'name': "Pixel 8",
-      'mac': "66:77:88:99:AA:BB",
-      'status': "Available",
-      'lastSeen': DateTime.now().subtract(Duration(minutes: 1)),
-    },
-    {
-      'name': "OnePlus 12",
-      'mac': "CC:DD:EE:FF:00:11",
-      'status': "Unavailable",
-      'lastSeen': DateTime.now().subtract(Duration(minutes: 5)),
-    },
-    {
-      'name': "iPhone 15",
-      'mac': "22:33:44:55:66:77",
-      'status': "Available",
-      'lastSeen': DateTime.now().subtract(Duration(seconds: 30)),
-    },
-    {
-      'name': "Huawei P60",
-      'mac': "88:99:AA:BB:CC:DD",
-      'status': "Connected",
-      'lastSeen': DateTime.now().subtract(Duration(seconds: 10)),
-    },
-  ];
+  List<Device> devices = [];
+  late BeaconConnections beacon;
+  Timer? refreshTimer;
 
-  Future<void> _refreshDevices() async {
-    await Future.delayed(Duration(seconds: 1));
+  @override
+  void initState() {
+    super.initState();
+    beacon = BeaconConnections();
+    _initBeacon();
+  }
+
+  Future<void> _initBeacon() async {
+    await beacon.init(widget.currentDeviceName);
+
+    // Set callback to update UI when a new device is found
+    beacon.onDeviceFound = (device) {
+      _loadDevices();
+    };
+
+    if (widget.mode == DashboardMode.ADVERTISING) {
+      await beacon.initiateCommunication();
+    } else {
+      await beacon.joinCommunication();
+    }
+
+    _loadDevices();
+    refreshTimer = Timer.periodic(Duration(seconds: 5), (_) => _loadDevices());
+  }
+
+  @override
+  void dispose() {
+    refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadDevices() async {
+    print("Loading devices from DB...");
+    final db = await DBService().database;
+    final maps = await db.query('devices');
+    print("loaded ${maps.length} devices");
     setState(() {
-      print('devices refreshed');
+      devices = maps.map((m) => Device.fromMap(m)).toList();
     });
   }
 
@@ -56,52 +73,6 @@ class _DashboardPageState extends State<DashboardPage> {
     if (diff.inSeconds < 60) return "${diff.inSeconds}s ago";
     if (diff.inMinutes < 60) return "${diff.inMinutes}m ago";
     return "${diff.inHours}h ago";
-  }
-
-  void connectDevice(String mac) {
-    setState(() {
-      devices = devices.map((d) {
-        if (d['mac'] == mac) {
-          return {...d, 'status': 'Connected', 'lastSeen': DateTime.now()};
-        }
-        return d;
-      }).toList();
-    });
-  }
-
-  void chat(String mac) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ChatPage(macAddress: mac),
-      ),
-    );
-  }
-
-  void quickMessage(String deviceName) {
-    List<String> messages = ["Are you ok?", "Do you need anything?"];
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text("Send Quick Message to $deviceName"),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: messages
-                .map(
-                  (msg) => ListTile(
-                    title: Text(msg),
-                    onTap: () {
-                      print("Sent '$msg' to $deviceName");
-                      Navigator.pop(context);
-                    },
-                  ),
-                )
-                .toList(),
-          ),
-        );
-      },
-    );
   }
 
   Color statusColor(String status) {
@@ -115,10 +86,113 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
+  void _connectDevice(Device device) async {
+    try {
+      // Request connection
+      await beacon.initiateCommunication();
+      setState(() {
+        device.status = "Connected";
+        device.lastSeen = DateTime.now();
+      });
+      await _updateDevice(device);
+    } catch (e) {
+      // handle error
+    }
+  }
+
+  void _disconnectDevice(Device device) async {
+    beacon.stopAll(); // stops advertising/discovery & disconnects all endpoints
+    setState(() {
+      device.status = "Available";
+      device.lastSeen = DateTime.now();
+    });
+    await _updateDevice(device);
+    _loadDevices();
+  }
+
+  // Accept or decline an invitation via dialog
+  void _showConnectionRequest(Device device) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text('Connection Request'),
+        content: Text('${device.deviceName} wants to connect. Accept?'),
+        actions: [
+          TextButton(
+            child: Text('Decline'),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          TextButton(
+            child: Text('Accept'),
+            onPressed: () {
+              beacon.acceptConnection(device.endpointId, beacon.handlePayload);
+
+              Navigator.of(context).pop();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _quickMessage(Device device) {
+    List<String> messages = ["Are you ok?", "Do you need anything?"];
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text("Send Quick Message to ${device.deviceName}"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: messages
+                .map(
+                  (msg) => ListTile(
+                    title: Text(msg),
+                    onTap: () {
+                      beacon.sendTo(device.endpointId, msg);
+                      Navigator.pop(context);
+                    },
+                  ),
+                )
+                .toList(),
+          ),
+        );
+      },
+    );
+  }
+
+  void _chat(Device device) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChatPage(macAddress: device.uuid),
+      ),
+    );
+  }
+
+  Future<void> _updateDevice(Device device) async {
+    final db = await DBService().database;
+    await db.update(
+      'devices',
+      device.toMap(),
+      where: 'uuid = ?',
+      whereArgs: [device.uuid],
+    );
+  }
+
+  bool isConnected(Device device) {
+    return beacon.connectedEndpoints.contains(device.endpointId);
+  }
+
+  Future<void> _refreshDevices() async {
+    await Future.delayed(Duration(seconds: 1));
+    await _loadDevices();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final connected = devices.where((d) => d['status'] == "Connected").toList();
-    final available = devices.where((d) => d['status'] == "Available").toList();
+    final connected = devices.where((d) => d.status == "Connected").toList();
+    final available = devices.where((d) => d.status == "Available").toList();
 
     return Scaffold(
       appBar: AppBar(title: Text('Device Dashboard')),
@@ -136,7 +210,6 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
             SizedBox(height: 20),
 
-            //connected device
             Padding(
               padding: EdgeInsets.only(left: 10),
               child: Text(
@@ -147,19 +220,19 @@ class _DashboardPageState extends State<DashboardPage> {
             ...connected.map(
               (device) => ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: statusColor(device['status']),
+                  backgroundColor: statusColor(device.status),
                   child: Icon(Icons.devices, color: Colors.white),
                 ),
-                title: Text(device['name']),
+                title: Text(device.deviceName),
                 subtitle: Text(
-                  "Status: ${device['status']}\nLast seen: ${formatLastSeen(device['lastSeen'])}",
+                  "Status: ${isConnected(device) ? 'Connected' : 'Available'}\nLast seen: ${formatLastSeen(device.lastSeen)}",
                 ),
                 trailing: PopupMenuButton<String>(
                   icon: Icon(Icons.more_vert),
                   onSelected: (value) {
-                    if (value == 'chat') chat(device['mac']);
-                    if (value == 'quick') quickMessage(device['name']);
-                    if (value == 'disconnect') print('disconnected');
+                    if (value == 'chat') _chat(device);
+                    if (value == 'quick') _quickMessage(device);
+                    if (value == 'disconnect') _disconnectDevice(device);
                   },
                   itemBuilder: (_) => [
                     PopupMenuItem(value: 'chat', child: Text('Chat')),
@@ -175,7 +248,6 @@ class _DashboardPageState extends State<DashboardPage> {
 
             SizedBox(height: 20),
 
-            // available devices
             Padding(
               padding: EdgeInsets.only(left: 10),
               child: Text(
@@ -187,18 +259,26 @@ class _DashboardPageState extends State<DashboardPage> {
             ...available.map(
               (device) => ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: statusColor(device['status']),
+                  backgroundColor: statusColor(device.status),
                   child: Icon(Icons.devices, color: Colors.white),
                 ),
-                title: Text(device['name']),
+                title: Text(device.deviceName),
                 subtitle: Text(
-                  "Status: ${device['status']}\nLast seen: ${formatLastSeen(device['lastSeen'])}",
+                  "Status: ${device.status}\nLast seen: ${formatLastSeen(device.lastSeen)}",
                 ),
                 trailing: Padding(
                   padding: EdgeInsets.only(right: 10),
                   child: Icon(Icons.link),
                 ),
-                onTap: () => connectDevice(device['mac']),
+                onTap: () {
+                  if (widget.mode == DashboardMode.BROWSING) {
+                    // Browsers can accept/decline invites
+                    _showConnectionRequest(device);
+                  } else {
+                    // Advertiser connects proactively
+                    _connectDevice(device);
+                  }
+                },
               ),
             ),
           ],

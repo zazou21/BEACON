@@ -5,6 +5,7 @@ import 'screens/dashboard_page.dart';
 import 'screens/chat_page.dart';
 import 'screens/resources_page.dart';
 import 'screens/profile_page.dart';
+import 'services/voice_commands.dart';
 
 void main() {
   runApp(const BeaconApp());
@@ -183,10 +184,7 @@ class LandingPage extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 24),
-        const Text(
-          'Voice commands supported (planned)',
-          style: TextStyle(fontSize: 12),
-        ),
+        VoiceCommandWidget(),
       ],
     );
   }

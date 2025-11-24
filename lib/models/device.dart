@@ -2,7 +2,7 @@ class Device {
   String uuid;
   String deviceName;
   String endpointId;
-  String status; // 'Connected', 'Available', 'Unavailable'
+  String status; // 'Connected', 'Available', etc.
   DateTime lastSeen;
   String lastMessage;
   DateTime createdAt;
@@ -34,7 +34,6 @@ class Device {
     };
   }
 
- 
   factory Device.fromMap(Map<String, dynamic> map) {
     return Device(
       uuid: map['uuid'],

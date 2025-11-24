@@ -1,288 +1,306 @@
 import 'package:flutter/material.dart';
-import 'dart:async';
-import 'package:beacon_project/models/device.dart';
-import 'chat_page.dart';
-import 'package:beacon_project/services/beacon_connections.dart';
+import 'package:beacon_project/services/nearby_connections/nearby_connections.dart';
 import 'package:beacon_project/services/db_service.dart';
+import 'package:beacon_project/models/device.dart';
+import 'package:beacon_project/models/cluster.dart';
+import 'package:nearby_connections/nearby_connections.dart';
+import 'package:sqflite/sqflite.dart';
 
-enum DashboardMode { BROWSING, ADVERTISING }
-// final dbService = DBService();
+enum DashboardMode { initiator, joiner }
 
 class DashboardPage extends StatefulWidget {
   final DashboardMode mode;
-  final String currentDeviceName;
-
-  const DashboardPage({
-    super.key,
-    required this.mode,
-    required this.currentDeviceName,
-  });
+  const DashboardPage({super.key, required this.mode});
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  List<Device> devices = [];
-  late BeaconConnections beacon;
-  Timer? refreshTimer;
+  final beacon = NearbyConnections();
+
+  List<Device> availableDevices = [];
+  List<Device> connectedDevices = [];
+  List<Map<String, String>> discoveredClusters = [];
+  List<Cluster> joinedClusters = [];
+  Cluster? currentCluster;
 
   @override
   void initState() {
     super.initState();
-    beacon = BeaconConnections();
-    _initBeacon();
+    _setupBeacon();
   }
 
-  Future<void> _initBeacon() async {
-    await beacon.init(widget.currentDeviceName);
+  Future<void> _setupBeacon() async {
+    await beacon.init();
 
-    // Set callback to update UI when a new device is found
-    beacon.onDeviceFound = (device) {
-      _loadDevices();
-    };
-
-    if (widget.mode == DashboardMode.ADVERTISING) {
-      await beacon.initiateCommunication();
-    } else {
+    if (widget.mode == DashboardMode.joiner) {
       await beacon.joinCommunication();
-    }
-
-    _loadDevices();
-    refreshTimer = Timer.periodic(Duration(seconds: 5), (_) => _loadDevices());
-  }
-
-  @override
-  void dispose() {
-    refreshTimer?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _loadDevices() async {
-    print("Loading devices from DB...");
-    final db = await DBService().database;
-    final maps = await db.query('devices');
-    print("loaded ${maps.length} devices");
-    setState(() {
-      devices = maps.map((m) => Device.fromMap(m)).toList();
-    });
-  }
-
-  String formatLastSeen(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
-    if (diff.inSeconds < 60) return "${diff.inSeconds}s ago";
-    if (diff.inMinutes < 60) return "${diff.inMinutes}m ago";
-    return "${diff.inHours}h ago";
-  }
-
-  Color statusColor(String status) {
-    switch (status) {
-      case "Connected":
-        return Colors.green;
-      case "Available":
-        return Colors.blue;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  void _connectDevice(Device device) async {
-    try {
-      // Request connection
+    } else {
       await beacon.initiateCommunication();
-      setState(() {
-        device.status = "Connected";
-        device.lastSeen = DateTime.now();
-      });
-      await _updateDevice(device);
-    } catch (e) {
-      // handle error
+    }
+
+    // for the discovery of devices & clusters
+    beacon.onDeviceFound = _onDeviceFoundHandler; // for initiator mode
+    beacon.onClusterFound = _onClusterFoundHandler; // for joiner mode
+
+    beacon.onConnectionRequest =
+        _onConnectionRequestHandler; // show invite dialog (joiner)
+
+    beacon.onClusterJoinedInitiatorSide =
+        _onClusterJoinedInitiatorSideHandler; // update connected devices list (initiator)
+
+    beacon.onClusterJoinedJoinerSide =
+        _onClusterJoinedJoinerSideHandler; // update joined clusters list (joiner)
+
+    await _loadCurrentCluster();
+    setState(() {});
+  }
+
+  Future<void> _loadCurrentCluster() async {
+    final db = await DBService().database;
+    final results = await db.query("clusters");
+    if (results.isNotEmpty) {
+      currentCluster = Cluster.fromMap(results.first);
+      if (widget.mode == DashboardMode.initiator) {
+        await _loadConnectedDevices();
+      }
+    }
+    setState(() {});
+  }
+
+  // load connected devices excluding self & remove user from availableDevices list
+  Future<void> _loadConnectedDevices() async {
+    if (currentCluster == null) return;
+    final db = await DBService().database;
+    // Get members in current cluster except itself
+    final members = await db.query(
+      "cluster_members",
+      where: "clusterId = ? AND deviceUuid != ?",
+      whereArgs: [currentCluster!.clusterId, beacon.uuid],
+    );
+    // Map to Device if needed; here assuming device info is in "devices" table
+    final devicesMaps = await db.query(
+      "devices",
+      where: "uuid IN (${List.filled(members.length, '?').join(',')})",
+      whereArgs: members.map((e) => e["deviceUuid"]).toList(),
+    );
+
+    connectedDevices = devicesMaps.map((map) => Device.fromMap(map)).toList();
+    availableDevices.removeWhere(
+      (d) => connectedDevices.any((cd) => cd.endpointId == d.endpointId),
+    );
+    print("Connected Devices Loaded: $connectedDevices");
+    setState(() {});
+  }
+
+  void _onDeviceFoundHandler(Device d) {
+    final exists = availableDevices.any((x) => x.endpointId == d.endpointId);
+    if (!exists) {
+      setState(() => availableDevices.add(d));
+    }
+
+    print("Device Found: ${d.deviceName} (${d.uuid})");
+    setState(() {});
+  }
+
+  // load clusters from database (joiner mode ) and add them to discoveredClusters list
+  // endpoint id msh fl database, 7ases we should add it, bas msh 2ader // mesh hases lazem ne add it
+
+  void _onClusterFoundHandler(Map<String, String> clusterInfo) {
+    discoveredClusters.add(clusterInfo);
+    print("Cluster Found: $clusterInfo");
+    setState(() {});
+  }
+
+  void _onClusterJoinedInitiatorSideHandler(String clusterId) async {
+    print("Joined Cluster: $clusterId");
+    await _loadConnectedDevices();
+    setState(() {});
+  }
+
+  void _onClusterJoinedJoinerSideHandler(String clusterId) async {
+    print("Joined Cluster (Joiner Side): $clusterId");
+    final db = await DBService().database;
+    final clusterMaps = await db.query(
+      "clusters",
+      where: "clusterId = ?",
+      whereArgs: [clusterId],
+    );
+    if (clusterMaps.isNotEmpty) {
+      final cluster = Cluster.fromMap(clusterMaps.first);
+      joinedClusters.add(cluster);
+      setState(() {});
     }
   }
 
-  void _disconnectDevice(Device device) async {
-    beacon.stopAll(); // stops advertising/discovery & disconnects all endpoints
-    setState(() {
-      device.status = "Available";
-      device.lastSeen = DateTime.now();
-    });
-    await _updateDevice(device);
-    _loadDevices();
+  // show invite dialog on connection request
+  void _onConnectionRequestHandler(String endpointId, ConnectionInfo info) {
+    print("Connection Request from $endpointId");
+
+    // Format: <initiatorUuid>|<clusterId>
+    final parts = info.endpointName.split("|");
+
+    if (parts.length < 2) {
+      print("Malformed endpointName from initiator.");
+      return;
+    }
+
+    final clusterId = parts[1];
+    final clusterName = "Cluster $clusterId"; // or look up name in DB
+
+    _showInviteDialog(endpointId, clusterName, clusterId);
   }
 
-  // Accept or decline an invitation via dialog
-  void _showConnectionRequest(Device device) {
+  void _showInviteDialog(
+    String endpointId,
+    String clusterName,
+    String clusterId,
+  ) {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: Text('Connection Request'),
-        content: Text('${device.deviceName} wants to connect. Accept?'),
+      builder: (dialogContext) => AlertDialog(
+        title: const Text("Network Invitation"),
+        content: Text("Do you want to join $clusterName?"),
         actions: [
           TextButton(
-            child: Text('Decline'),
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text("Reject"),
           ),
           TextButton(
-            child: Text('Accept'),
-            onPressed: () {
-              beacon.acceptConnection(device.endpointId, beacon.handlePayload);
+            onPressed: () async {
+              Navigator.pop(dialogContext);
 
-              Navigator.of(context).pop();
+              await beacon.acceptInvite(endpointId);
+
+              // Optional: Update DB
+              final db = await DBService().database;
+              await db.insert("cluster_members", {
+                "clusterId": clusterId,
+                "deviceUuid": beacon.uuid,
+              }, conflictAlgorithm: ConflictAlgorithm.ignore);
             },
+            child: const Text("Join"),
           ),
         ],
       ),
     );
   }
 
-  void _quickMessage(Device device) {
-    List<String> messages = ["Are you ok?", "Do you need anything?"];
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text("Send Quick Message to ${device.deviceName}"),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: messages
-                .map(
-                  (msg) => ListTile(
-                    title: Text(msg),
-                    onTap: () {
-                      beacon.sendTo(device.endpointId, msg);
-                      Navigator.pop(context);
-                    },
-                  ),
-                )
-                .toList(),
-          ),
-        );
-      },
-    );
+  // This method invites a joiner device to the cluster (initiator)
+  void _inviteJoiner(String endpointId, String joinerUuid) {
+    if (currentCluster == null) return;
+    beacon.sendControlMessage(endpointId, {
+      "type": "cluster_invite",
+      "clusterId": currentCluster!.clusterId,
+      "clusterName": currentCluster!.name,
+    });
   }
 
-  void _chat(Device device) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ChatPage(macAddress: device.uuid),
-      ),
-    );
-  }
-
-  Future<void> _updateDevice(Device device) async {
+  // This method prints database contents for debugging purposes
+  Future<void> _printDatabaseContents() async {
     final db = await DBService().database;
-    await db.update(
-      'devices',
-      device.toMap(),
-      where: 'uuid = ?',
-      whereArgs: [device.uuid],
-    );
+    final devices = await db.query("devices");
+    final clusters = await db.query("clusters");
+    final members = await db.query("cluster_members");
+
+    print("Devices: $devices");
+    print("Clusters: $clusters");
+    print("Cluster Members: $members");
   }
 
-  bool isConnected(Device device) {
-    return beacon.connectedEndpoints.contains(device.endpointId);
-  }
-
-  Future<void> _refreshDevices() async {
-    await Future.delayed(Duration(seconds: 1));
-    await _loadDevices();
-  }
-
+  // UI build function with connectedDevices section for initiator mode
   @override
   Widget build(BuildContext context) {
-    final connected = devices.where((d) => d.status == "Connected").toList();
-    final available = devices.where((d) => d.status == "Available").toList();
-
     return Scaffold(
-      appBar: AppBar(title: Text('Device Dashboard')),
-      body: RefreshIndicator(
-        onRefresh: _refreshDevices,
-        child: ListView(
-          children: [
-            Center(child: Icon(Icons.wifi, size: 50, color: Colors.grey)),
-            SizedBox(height: 10),
-            Center(
-              child: Text(
-                'Nearby Devices',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+      appBar: AppBar(
+        title: const Text("Dashboard"),
+        actions: [
+          TextButton(
+            onPressed: _printDatabaseContents,
+            child: const Text("Print DB"),
+          ),
+          TextButton(
+            onPressed: () async {
+              await beacon.stopAll();
+              if (!mounted) return;
+              setState(() {
+                currentCluster = null;
+                availableDevices.clear();
+                connectedDevices.clear();
+              });
+            },
+            child: const Text("Stop All"),
+          ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          if (currentCluster != null)
+            Card(
+              child: ListTile(
+                title: Text("Your Cluster: ${currentCluster!.name}"),
+                subtitle: Text("ID: ${currentCluster!.clusterId}"),
               ),
             ),
-            SizedBox(height: 20),
 
-            Padding(
-              padding: EdgeInsets.only(left: 10),
-              child: Text(
-                'Connected Devices',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-            ),
-            ...connected.map(
-              (device) => ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: statusColor(device.status),
-                  child: Icon(Icons.devices, color: Colors.white),
-                ),
-                title: Text(device.deviceName),
-                subtitle: Text(
-                  "Status: ${isConnected(device) ? 'Connected' : 'Available'}\nLast seen: ${formatLastSeen(device.lastSeen)}",
-                ),
-                trailing: PopupMenuButton<String>(
-                  icon: Icon(Icons.more_vert),
-                  onSelected: (value) {
-                    if (value == 'chat') _chat(device);
-                    if (value == 'quick') _quickMessage(device);
-                    if (value == 'disconnect') _disconnectDevice(device);
-                  },
-                  itemBuilder: (_) => [
-                    PopupMenuItem(value: 'chat', child: Text('Chat')),
-                    PopupMenuItem(value: 'quick', child: Text('Quick Message')),
-                    PopupMenuItem(
-                      value: 'disconnect',
-                      child: Text('Disconnect'),
-                    ),
-                  ],
+          if (widget.mode == DashboardMode.initiator) ...[
+            const SizedBox(height: 20),
+            const Text("Available Devices"),
+            ...availableDevices.map(
+              (d) => Card(
+                child: ListTile(
+                  title: Text(d.deviceName),
+                  subtitle: Text("UUID: ${d.uuid}"),
+                  trailing: TextButton(
+                    onPressed: () => _inviteJoiner(d.endpointId, d.uuid),
+                    child: const Text("Invite"),
+                  ),
                 ),
               ),
             ),
 
-            SizedBox(height: 20),
-
-            Padding(
-              padding: EdgeInsets.only(left: 10),
-              child: Text(
-                'Available Devices',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-            ),
-
-            ...available.map(
-              (device) => ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: statusColor(device.status),
-                  child: Icon(Icons.devices, color: Colors.white),
+            const SizedBox(height: 20),
+            const Text("Connected Devices"),
+            ...connectedDevices.map(
+              (d) => Card(
+                child: ListTile(
+                  title: Text(d.deviceName),
+                  subtitle: Text("UUID: ${d.uuid}"),
                 ),
-                title: Text(device.deviceName),
-                subtitle: Text(
-                  "Status: ${device.status}\nLast seen: ${formatLastSeen(device.lastSeen)}",
-                ),
-                trailing: Padding(
-                  padding: EdgeInsets.only(right: 10),
-                  child: Icon(Icons.link),
-                ),
-                onTap: () {
-                  if (widget.mode == DashboardMode.BROWSING) {
-                    // Browsers can accept/decline invites
-                    _showConnectionRequest(device);
-                  } else {
-                    // Advertiser connects proactively
-                    _connectDevice(device);
-                  }
-                },
               ),
             ),
           ],
-        ),
+
+          if (widget.mode == DashboardMode.joiner) ...[
+            const SizedBox(height: 20),
+            const Text("Discovered Clusters"),
+            ...discoveredClusters.map(
+              (c) => Card(
+                child: ListTile(
+                  title: Text(c["clusterName"] ?? "Unknown Cluster"),
+                  subtitle: Text("ID: ${c["clusterId"]}"),
+                  trailing: TextButton(
+                    onPressed: () =>
+                        beacon.joinCluster(c["endpointId"]!, c["clusterId"]!),
+                    child: const Text("Join"),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text("Joined Clusters"),
+            ...joinedClusters.map(
+              (c) => Card(
+                child: ListTile(
+                  title: Text(c.name),
+                  subtitle: Text("ID: ${c.clusterId}"),
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

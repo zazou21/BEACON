@@ -5,16 +5,12 @@ import 'screens/dashboard_page.dart';
 import 'screens/chat_page.dart';
 import 'screens/resources_page.dart';
 import 'screens/profile_page.dart';
-<<<<<<< HEAD
-=======
 import 'services/voice_commands.dart';
->>>>>>> 58ff5ae76bbde7fd8e72ef29c3832ddb48a8da22
+import 'services/db_service.dart';
 
 void main() {
   runApp(const BeaconApp());
 }
-
-
 
 class BeaconApp extends StatefulWidget {
   const BeaconApp({super.key});
@@ -50,6 +46,7 @@ final GoRouter _router = GoRouter(
       builder: (context, state) => const LandingPage(),
     ),
 
+    // ShellRoute provides a persistent scaffold with BottomNavigationBar
     ShellRoute(
       builder: (context, state, child) {
         return HomeShell(child: child);
@@ -62,25 +59,21 @@ final GoRouter _router = GoRouter(
             // Parse mode from query parameters
             final modeParam = state.uri.queryParameters['mode'] ?? 'browse';
             late final DashboardMode mode;
-            if (modeParam == 'start') {
-              mode = DashboardMode.ADVERTISING;
-            } else if (modeParam == 'join') {
-              mode = DashboardMode.BROWSING;
+            if (modeParam == 'joiner') {
+              mode = DashboardMode.joiner;
+            } else if (modeParam == 'initiator') {
+              mode = DashboardMode.initiator;
             } else {
-              mode = DashboardMode.BROWSING; // default fallback
+              mode = DashboardMode.joiner; // default fallback
             }
-            return DashboardPage(
-              mode: mode,
-              currentDeviceName:
-                  "YourDeviceNameHere", // pass the correct device name
-            );
+            return DashboardPage(mode: mode);
           },
         ),
 
         GoRoute(
           path: '/chat',
           name: 'chat',
-          builder: (context, state) => ChatPage(macAddress: ''),
+          builder: (context, state) => const ChatPage(macAddress:'' ),
         ),
         GoRoute(
           path: '/resources',
@@ -120,6 +113,31 @@ class ThemeToggleButton extends StatelessWidget {
   }
 }
 
+class DbFlushButton extends StatelessWidget {
+  final VoidCallback onFlush;
+  const DbFlushButton({super.key, required this.onFlush});
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: 'Flush Database',
+      icon: const Icon(Icons.delete_forever),
+      onPressed: () {
+        onFlush();
+        
+      },
+    );
+  }
+}
+
+void onFlush() async{
+  final db=await DBService().database;
+  await db.delete('devices');
+  await db.delete('clusters');
+  await db.delete('cluster_members');
+
+}
+
 // ---------------------------
 // Landing Page
 // ---------------------------
@@ -128,12 +146,12 @@ class LandingPage extends StatelessWidget {
 
   void _startNew(BuildContext context) {
     // Navigate to chat in "start" mode
-    context.go('/dashboard?mode=join');
+    context.go('/dashboard?mode=initiator');
   }
 
   void _joinExisting(BuildContext context) {
     // Navigate to dashboard in "join" mode
-    context.go('/dashboard?mode=start');
+    context.go('/dashboard?mode=joiner');
   }
 
   @override
@@ -145,6 +163,7 @@ class LandingPage extends StatelessWidget {
         actions: const [
           // Theme toggle in Landing AppBar
           ThemeToggleButton(),
+          DbFlushButton(onFlush: onFlush)
         ],
       ),
       body: SafeArea(
@@ -202,14 +221,7 @@ class LandingPage extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 24),
-<<<<<<< HEAD
-        const Text(
-          'Voice commands supported (planned)',
-          style: TextStyle(fontSize: 12),
-        ),
-=======
         VoiceCommandWidget(),
->>>>>>> 58ff5ae76bbde7fd8e72ef29c3832ddb48a8da22
       ],
     );
   }
@@ -289,16 +301,16 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   final Map<String, int> _locationToIndex = {
     '/dashboard': 0,
-    // '/chat': 1,
-    '/resources': 1,
-    '/profile': 2,
+    '/chat': 1,
+    '/resources': 2,
+    '/profile': 3,
   };
 
   final Map<int, String> _indexToTitle = {
     0: 'Dashboard',
-    // 1: 'Chat',
-    1: 'Resources',
-    2: 'Profile',
+    1: 'Chat',
+    2: 'Resources',
+    3: 'Profile',
   };
 
   int _currentIndex = 0;
@@ -309,13 +321,13 @@ class _HomeShellState extends State<HomeShell> {
       case 0:
         context.go('/dashboard');
         break;
-      // case 1:
-      //   context.go('/chat');
-      //   break;
       case 1:
-        context.go('/resources');
+        context.go('/chat');
         break;
       case 2:
+        context.go('/resources');
+        break;
+      case 3:
         context.go('/profile');
         break;
     }
@@ -351,7 +363,8 @@ class _HomeShellState extends State<HomeShell> {
       appBar: AppBar(
         title: Text(title),
         actions: const [
-          ThemeToggleButton(), // shared toggle here so all inner pages show it
+          ThemeToggleButton(),
+          DbFlushButton(onFlush: onFlush) // shared toggle here so all inner pages show it
         ],
       ),
       body: widget.child,
@@ -364,7 +377,7 @@ class _HomeShellState extends State<HomeShell> {
             icon: Icon(Icons.dashboard),
             label: 'Dashboard',
           ),
-          // BottomNavigationBarItem(icon: Icon(Icons.chat_bubble), label: 'Chat'),
+          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble), label: 'Chat'),
           BottomNavigationBarItem(
             icon: Icon(Icons.local_hospital),
             label: 'Resources',

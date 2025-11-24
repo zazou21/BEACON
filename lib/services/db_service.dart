@@ -14,6 +14,7 @@ class DBService {
     return _db!;
   }
 
+
   Future<Database> _initDB() async {
     final path = join(await getDatabasesPath(), 'app.db');
     return await openDatabase(
@@ -21,19 +22,38 @@ class DBService {
       version: 1,
       onCreate: (db, version) async {
         await db.execute("""
-          CREATE TABLE devices (
-            uuid TEXT PRIMARY KEY,
-            deviceName TEXT,
-            endpointId TEXT,
-            status TEXT,
-            lastSeen INTEGER,
-            lastMessage TEXT,
-            createdAt INTEGER,
-            updatedAt INTEGER
-          );
+        CREATE TABLE devices (
+          uuid TEXT PRIMARY KEY,
+          deviceName TEXT,
+          endpointId TEXT,
+          status TEXT,
+          lastSeen INTEGER,
+          lastMessage TEXT,
+          createdAt INTEGER,
+          updatedAt INTEGER
+        )
+      """);
 
-        
-        """);
+        await db.execute("""
+        CREATE TABLE clusters (
+          clusterId TEXT PRIMARY KEY,
+          ownerUuid TEXT,
+          name TEXT,
+          createdAt INTEGER,
+          updatedAt INTEGER
+        )
+      """);
+
+        await db.execute("""
+        CREATE TABLE cluster_members (
+          clusterId TEXT,
+          deviceUuid TEXT,
+          joinedAt INTEGER,
+          PRIMARY KEY(clusterId, deviceUuid),
+          FOREIGN KEY(clusterId) REFERENCES clusters(clusterId),
+          FOREIGN KEY(deviceUuid) REFERENCES devices(uuid)
+        )
+      """);
       },
     );
   }

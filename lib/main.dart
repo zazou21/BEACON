@@ -5,6 +5,9 @@ import 'screens/dashboard_page.dart';
 import 'screens/chat_page.dart';
 import 'screens/resources_page.dart';
 import 'screens/profile_page.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:beacon_project/services/db_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(const BeaconApp());
@@ -44,7 +47,6 @@ final GoRouter _router = GoRouter(
       builder: (context, state) => const LandingPage(),
     ),
 
-   
     ShellRoute(
       builder: (context, state, child) {
         return HomeShell(child: child);
@@ -54,14 +56,25 @@ final GoRouter _router = GoRouter(
           path: '/dashboard',
           name: 'dashboard',
           builder: (context, state) {
-          
-            return DashboardPage();
+            // Parse mode from query parameters
+            final modeParam = state.uri.queryParameters['mode'] ?? 'browse';
+            print('[Router] Dashboard mode param: $modeParam');
+            late final DashboardMode mode;
+            if (modeParam == 'joiner') {
+              mode = DashboardMode.joiner;
+            } else if (modeParam == 'initiator') {
+              mode = DashboardMode.initiator;
+            } else {
+              mode = DashboardMode.joiner; // default fallback
+            }
+            return DashboardPage(mode: mode);
           },
         ),
+
         GoRoute(
           path: '/chat',
           name: 'chat',
-          builder: (context, state) => ChatPage(macAddress: '',),
+          builder: (context, state) => ChatPage(macAddress: ''),
         ),
         GoRoute(
           path: '/resources',
@@ -80,7 +93,31 @@ final GoRouter _router = GoRouter(
 
 // ---------------------------
 // Helper widget: ThemeToggleButton
+
 // ---------------------------
+class DbFlushButton extends StatelessWidget {
+  final VoidCallback onFlush;
+  const DbFlushButton({super.key, required this.onFlush});
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: 'Flush Database',
+      icon: const Icon(Icons.delete_forever),
+      onPressed: () {
+        onFlush();
+      },
+    );
+  }
+}
+
+void onFlush() async {
+  final db = await DBService().database;
+  await db.delete('devices');
+  await db.delete('clusters');
+  await db.delete('cluster_members');
+}
+
 class ThemeToggleButton extends StatelessWidget {
   const ThemeToggleButton({super.key});
 
@@ -109,17 +146,25 @@ class LandingPage extends StatelessWidget {
 
   void _startNew(BuildContext context) {
     // Navigate to chat in "start" mode
-    context.go('/dashboard?mode=join');
-   
+    context.go('/dashboard?mode=initiator');
   }
 
   void _joinExisting(BuildContext context) {
     // Navigate to dashboard in "join" mode
-    context.go( '/chat?mode=start');
+    context.go('/dashboard?mode=joiner');
+  }
+
+  Future<void> deleteSavedDashboardMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('dashboard_mode');
   }
 
   @override
   Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      deleteSavedDashboardMode();
+    });
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('BEACON'),
@@ -265,11 +310,20 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
+  Future<DashboardMode?> getSavedDashboardMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('dashboard_mode');
+
+    if (saved == null) return null;
+    return DashboardMode.values.firstWhere((e) => e.name == saved);
+  }
+
   final Map<String, int> _locationToIndex = {
     '/dashboard': 0,
     // '/chat': 1,
     '/resources': 1,
     '/profile': 2,
+    '/': 3,
   };
 
   final Map<int, String> _indexToTitle = {
@@ -277,24 +331,31 @@ class _HomeShellState extends State<HomeShell> {
     // 1: 'Chat',
     1: 'Resources',
     2: 'Profile',
+    3: 'Landing',
   };
 
   int _currentIndex = 0;
 
-  void _onTap(int index) {
+  void _onTap(int index) async {
+    final mode = await getSavedDashboardMode();
+    print('Navigating to index $index with mode ${mode?.name}');
     setState(() => _currentIndex = index);
     switch (index) {
       case 0:
-        context.go('/dashboard');
+        if (mode != null) {
+          context.go('/dashboard?mode=${mode.name}');
+        } else {
+          context.go('/dashboard');
+        }
         break;
-      // case 1:
-      //   context.go('/chat');
-      //   break;
       case 1:
         context.go('/resources');
         break;
       case 2:
         context.go('/profile');
+        break;
+      case 3:
+        context.go('/');
         break;
     }
   }
@@ -330,6 +391,7 @@ class _HomeShellState extends State<HomeShell> {
         title: Text(title),
         actions: const [
           ThemeToggleButton(), // shared toggle here so all inner pages show it
+          DbFlushButton(onFlush: onFlush), // DB flush button
         ],
       ),
       body: widget.child,
@@ -348,6 +410,7 @@ class _HomeShellState extends State<HomeShell> {
             label: 'Resources',
           ),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Landing'),
         ],
       ),
     );

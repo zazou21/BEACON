@@ -696,7 +696,7 @@ class _DashboardPageState extends State<DashboardPage>
                                   setState(() {
                                     joinedCluster = null;
                                     connectedDevicesToCluster.clear();
-                                  })
+                                  }),
                                 },
                                 tooltip: "Leave",
                               ),

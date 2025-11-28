@@ -3,40 +3,57 @@ import 'package:sqflite/sqflite.dart';
 import 'payload_strategy.dart';
 import 'nearby_connections.dart';
 
+
 class MarkOfflinePayloadStrategy implements PayloadStrategy {
+
+  final NearbyConnectionsBase beacon;
+
+  MarkOfflinePayloadStrategy(this.beacon);
+
   @override
   Future<void> handle(String endpointId, Map<String, dynamic> data) async {
     print("Handling MARK_OFFLINE payload for uuid: ${data['uuid']}");
 
     final deviceUuid = data['uuid'] as String?;
-    // if (deviceUuid == null) return;
+    if (deviceUuid == null) {
+      print("Error: deviceUuid is null in MARK_OFFLINE payload");
+      return;
+    }
 
-    final db = await DBService().database;
+    try {
+      final db = await DBService().database;
 
-    final existing = await db.query(
-      'devices',
-      where: 'uuid = ?',
-      whereArgs: [deviceUuid],
-    );
+      final existing = await db.query(
+        'devices',
+        where: 'uuid = ?',
+        whereArgs: [deviceUuid],
+        limit: 1,
+      );
 
-    print("Found ${existing.length} existing device(s) with uuid $deviceUuid");
+      print("Found ${existing.length} existing device(s) with uuid $deviceUuid");
 
-    if (existing.isNotEmpty) {
-      // Make row editable
-      final deviceMap = Map<String, dynamic>.from(existing.first);
+      if (existing.isEmpty) {
+        print("Warning: Device $deviceUuid not found in database");
+        return;
+      }
 
-      deviceMap['isOnline'] = 0;
-      deviceMap['lastSeen'] = DateTime.now().millisecondsSinceEpoch;
-
-      print("Marking device ${deviceMap['uuid']} as offline in the database.");
-
+      // Update device status
       await db.update(
         'devices',
-        deviceMap,
+        {
+          'isOnline': 0,
+          'lastSeen': DateTime.now().millisecondsSinceEpoch,
+        },
         where: 'uuid = ?',
         whereArgs: [deviceUuid],
       );
-      NearbyConnections().onStatusChange?.call();
+
+      print("Device $deviceUuid marked as offline in database");
+
+      // Trigger status change callback
+      beacon.onStatusChange?.call();
+    } catch (e) {
+      print("Error handling MARK_OFFLINE payload: $e");
     }
   }
 }

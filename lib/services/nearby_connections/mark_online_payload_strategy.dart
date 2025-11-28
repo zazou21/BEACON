@@ -7,6 +7,9 @@ import 'package:beacon_project/services/db_service.dart';
 import 'nearby_connections.dart';
 
 class MarkOnlinePayloadStrategy implements PayloadStrategy {
+  final NearbyConnectionsBase beacon;
+
+  MarkOnlinePayloadStrategy(this.beacon);
   @override
   Future<void> handle(String endpointId, Map<String, dynamic> data) async {
     print("Handling MARK_ONLINE payload for endpointId: $endpointId");
@@ -35,7 +38,7 @@ class MarkOnlinePayloadStrategy implements PayloadStrategy {
         where: 'uuid = ?',
         whereArgs: [deviceUuid],
       );
-      NearbyConnections().onStatusChange?.call();
+      beacon.onStatusChange?.call();
     }
   }
 }

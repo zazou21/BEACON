@@ -7,8 +7,11 @@ import 'payload_strategy.dart';
 import 'nearby_connections.dart';
 
 class ClusterInfoPayloadStrategy implements PayloadStrategy {
+  final NearbyConnectionsBase beacon;
+  ClusterInfoPayloadStrategy(this.beacon);
   @override
   Future<void> handle(String endpointId, Map<String, dynamic> data) async {
+    print("Handling CLUSTER_INFO payload for endpointId: $endpointId");
     final clusterId = data['clusterId'] as String?;
     final devices = data['devices'] as List<dynamic>?;
     final members = data['members'] as List<dynamic>?;
@@ -72,7 +75,7 @@ class ClusterInfoPayloadStrategy implements PayloadStrategy {
         'deviceUuid': memberMap['deviceUuid'],
       }, conflictAlgorithm: ConflictAlgorithm.ignore);
     }
-    NearbyConnections().onClusterInfoSent?.call();
+    beacon.onClusterInfoSent?.call();
   }
 
   Future<String> _getDeviceUUID() async {

@@ -457,7 +457,6 @@ class _PostRequestPanelState extends State<PostRequestPanel> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),

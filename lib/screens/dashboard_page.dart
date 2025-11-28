@@ -105,10 +105,20 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   // load clusters from database (joiner mode ) and add them to discoveredClusters list
-  // endpoint id msh fl database, 7ases we should add it, bas msh 2ader // mesh hases lazem ne add it
+  // endpoint id msh fl database, 7ases we should add it, bas msh 2ader
 
   void _onClusterFoundHandler(Map<String, String> clusterInfo) {
+    final clusterId = clusterInfo["clusterId"];
+    if (clusterId == null) return;
+
+    // Already in the list?
+    final exists = discoveredClusters.any((c) => c["clusterId"] == clusterId);
+    if (exists) return;
+
+    // Even if I'm already joined to this cluster, keep it visible
+    // Do NOT filter it out.
     discoveredClusters.add(clusterInfo);
+
     print("Cluster Found: $clusterInfo");
     setState(() {});
   }
@@ -121,15 +131,25 @@ class _DashboardPageState extends State<DashboardPage> {
 
   void _onClusterJoinedJoinerSideHandler(String clusterId) async {
     print("Joined Cluster (Joiner Side): $clusterId");
+
+    // Remove it from discovered list
+    discoveredClusters.removeWhere((c) => c["clusterId"] == clusterId);
+
     final db = await DBService().database;
     final clusterMaps = await db.query(
       "clusters",
       where: "clusterId = ?",
       whereArgs: [clusterId],
     );
+
     if (clusterMaps.isNotEmpty) {
       final cluster = Cluster.fromMap(clusterMaps.first);
-      joinedClusters.add(cluster);
+
+      // Avoid duplicates
+      if (!joinedClusters.any((c) => c.clusterId == clusterId)) {
+        joinedClusters.add(cluster);
+      }
+
       setState(() {});
     }
   }
@@ -185,16 +205,6 @@ class _DashboardPageState extends State<DashboardPage> {
         ],
       ),
     );
-  }
-
-  // This method invites a joiner device to the cluster (initiator)
-  void _inviteJoiner(String endpointId, String joinerUuid) {
-    if (currentCluster == null) return;
-    beacon.sendControlMessage(endpointId, {
-      "type": "cluster_invite",
-      "clusterId": currentCluster!.clusterId,
-      "clusterName": currentCluster!.name,
-    });
   }
 
   // This method prints database contents for debugging purposes
@@ -254,7 +264,12 @@ class _DashboardPageState extends State<DashboardPage> {
                   title: Text(d.deviceName),
                   subtitle: Text("UUID: ${d.uuid}"),
                   trailing: TextButton(
-                    onPressed: () => _inviteJoiner(d.endpointId, d.uuid),
+                    onPressed: () =>
+                        //pass cl
+                        beacon.inviteToCluster(
+                          d.endpointId,
+                          currentCluster!.clusterId,
+                        ),
                     child: const Text("Invite"),
                   ),
                 ),
@@ -266,7 +281,7 @@ class _DashboardPageState extends State<DashboardPage> {
             ...connectedDevices.map(
               (d) => Card(
                 child: ListTile(
-                  title: Text(d.deviceName),
+                  title: Text("${d.deviceName}"),
                   subtitle: Text("UUID: ${d.uuid}"),
                 ),
               ),

@@ -2,7 +2,7 @@ class Device {
   String uuid;
   String deviceName;
   String endpointId;
-  String status; // 'Connected', 'Available', etc.
+  String status;
   DateTime lastSeen;
   String lastMessage;
   DateTime createdAt;
@@ -17,9 +17,24 @@ class Device {
     this.lastMessage = '',
     DateTime? createdAt,
     DateTime? updatedAt,
-  })  : lastSeen = lastSeen ?? DateTime.now(),
-        createdAt = createdAt ?? DateTime.now(),
-        updatedAt = updatedAt ?? DateTime.now();
+  }) : lastSeen = lastSeen ?? DateTime.now(),
+       createdAt = createdAt ?? DateTime.now(),
+       updatedAt = updatedAt ?? DateTime.now();
+
+  static DateTime _parseDate(dynamic v) {
+    if (v is int) {
+      return DateTime.fromMillisecondsSinceEpoch(v);
+    }
+    if (v is String) {
+      // ISO-8601 datetime → parse directly
+      if (RegExp(r'^\d{4}-\d{2}-\d{2}').hasMatch(v)) {
+        return DateTime.parse(v);
+      }
+      // numeric string → millis
+      return DateTime.fromMillisecondsSinceEpoch(int.parse(v));
+    }
+    throw Exception("Could not parse date field: $v");
+  }
 
   Map<String, dynamic> toMap() {
     return {
@@ -27,10 +42,11 @@ class Device {
       'deviceName': deviceName,
       'endpointId': endpointId,
       'status': status,
-      'lastSeen': lastSeen.millisecondsSinceEpoch,
+      // store ISO-8601 (consistent)
+      'lastSeen': lastSeen.toIso8601String(),
       'lastMessage': lastMessage,
-      'createdAt': createdAt.millisecondsSinceEpoch,
-      'updatedAt': updatedAt.millisecondsSinceEpoch,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
     };
   }
 
@@ -40,10 +56,10 @@ class Device {
       deviceName: map['deviceName'],
       endpointId: map['endpointId'],
       status: map['status'],
-      lastSeen: DateTime.fromMillisecondsSinceEpoch(map['lastSeen']),
+      lastSeen: _parseDate(map['lastSeen']),
       lastMessage: map['lastMessage'] ?? '',
-      createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt']),
-      updatedAt: DateTime.fromMillisecondsSinceEpoch(map['updatedAt']),
+      createdAt: _parseDate(map['createdAt']),
+      updatedAt: _parseDate(map['updatedAt']),
     );
   }
 }

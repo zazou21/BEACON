@@ -1,20 +1,30 @@
 import 'payload_strategy.dart';
-import 'handshake_payload_strategy.dart';
+import 'cluster_info_payload_strategy.dart';
+import 'resources_payload_strategy.dart';
 
 class PayloadStrategyFactory {
-  static PayloadStrategy getHandler(String data) {
-    if (data.startsWith("HANDSHAKE:")) {
-      return HandshakePayloadStrategy();
-    }
+  static PayloadStrategy getHandler(String type) {
+    switch (type) {
+      case "CLUSTER_INFO":
+        return ClusterInfoPayloadStrategy();
 
-    // Fallback (optional)
-    return _EmptyPayloadStrategy();
+      case "RESOURCES":
+        return ResourcesPayloadStrategy();
+      
+
+      // add more types here
+      // case "PING": return PingPayloadStrategy();
+      // case "CHAT": return ChatPayloadStrategy();
+
+      default:
+        return _EmptyPayloadStrategy();
+    }
   }
 }
 
 class _EmptyPayloadStrategy implements PayloadStrategy {
   @override
-  void handle(String data, String endpointId) {
-    print("No matching payload strategy for: $data");
+  Future<void> handle(String endpointId, Map<String, dynamic> data) async {
+    print("No handler for message type '${data['type']}'");
   }
 }

@@ -353,7 +353,7 @@ class _HomeShellState extends State<HomeShell> {
       }
     }
   }
-
+  
   @override
   Widget build(BuildContext context) {
     final loc = GoRouterState.of(context).uri.toString();

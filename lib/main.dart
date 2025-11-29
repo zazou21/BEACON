@@ -333,18 +333,18 @@ class _HomeShellState extends State<HomeShell> {
 
   final Map<String, int> _locationToIndex = {
     '/dashboard': 0,
-    // '/chat': 1,
-    '/resources': 1,
-    '/profile': 2,
-    '/': 3,
+    '/chat': 1,
+    '/resources': 2,
+    '/profile': 3,
+    '/': 4,
   };
 
   final Map<int, String> _indexToTitle = {
     0: 'Dashboard',
-    // 1: 'Chat',
-    1: 'Resources',
-    2: 'Profile',
-    3: 'Landing',
+    1: 'Chat',
+    2: 'Resources',
+    3: 'Profile',
+    4: 'Landing',
   };
 
   int _currentIndex = 0;

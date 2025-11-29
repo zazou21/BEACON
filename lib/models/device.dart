@@ -5,6 +5,7 @@ class Device {
   String status;
 
   bool isOnline;
+  bool inRange;
 
   DateTime lastSeen;
   String lastMessage;
@@ -16,7 +17,8 @@ class Device {
     required this.deviceName,
     required this.endpointId,
     required this.status,
-    this.isOnline = true, // default now TRUE
+    this.isOnline = true,
+    this.inRange = true,
     DateTime? lastSeen,
     this.lastMessage = '',
     DateTime? createdAt,
@@ -26,9 +28,7 @@ class Device {
        updatedAt = updatedAt ?? DateTime.now();
 
   static DateTime _parseDate(dynamic v) {
-    if (v is int) {
-      return DateTime.fromMillisecondsSinceEpoch(v);
-    }
+    if (v is int) return DateTime.fromMillisecondsSinceEpoch(v);
     if (v is String) {
       if (RegExp(r'^\d{4}-\d{2}-\d{2}').hasMatch(v)) {
         return DateTime.parse(v);
@@ -45,6 +45,7 @@ class Device {
       'endpointId': endpointId,
       'status': status,
       'isOnline': isOnline ? 1 : 0,
+      'inRange': inRange ? 1 : 0,
       'lastSeen': lastSeen.toIso8601String(),
       'lastMessage': lastMessage,
       'createdAt': createdAt.toIso8601String(),
@@ -58,7 +59,8 @@ class Device {
       deviceName: map['deviceName'],
       endpointId: map['endpointId'],
       status: map['status'],
-      isOnline: (map['isOnline'] ?? 1) == 1, // default to TRUE if missing
+      isOnline: (map['isOnline'] ?? 1) == 1,
+      inRange: (map['inRange'] ?? 1) == 1, // default TRUE
       lastSeen: _parseDate(map['lastSeen']),
       lastMessage: map['lastMessage'] ?? '',
       createdAt: _parseDate(map['createdAt']),

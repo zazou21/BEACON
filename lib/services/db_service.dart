@@ -21,25 +21,25 @@ class DBService {
       version: 1,
       onCreate: (db, version) async {
         await db.execute("""
-            CREATE TABLE devices (
+        CREATE TABLE devices (
           uuid TEXT PRIMARY KEY,
           deviceName TEXT,
           endpointId TEXT,
           status TEXT,
           isOnline INTEGER DEFAULT 1,
+          inRange INTEGER DEFAULT 1,     -- TRUE
           lastSeen INTEGER,
           lastMessage TEXT,
           createdAt INTEGER,
           updatedAt INTEGER
-        )
-
-        
+        )        
       """);
 
         await db.execute("""
         CREATE TABLE clusters (
           clusterId TEXT PRIMARY KEY,
           ownerUuid TEXT,
+          ownerEndpointId TEXT,
           name TEXT,
           createdAt INTEGER,
           updatedAt INTEGER

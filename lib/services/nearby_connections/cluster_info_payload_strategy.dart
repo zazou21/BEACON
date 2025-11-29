@@ -28,7 +28,7 @@ class ClusterInfoPayloadStrategy implements PayloadStrategy {
       // skip joiner's own device
       if (deviceMap['uuid'] == joinerUuid) continue;
 
-      //popule endpint for sender
+      //popule endpoint for sender
       if (deviceMap['uuid'] == data['senderUuid']) {
         deviceMap['endpointId'] = endpointId;
       }

@@ -107,6 +107,7 @@ class _DashboardPageState extends State<DashboardPage>
     final initiator = beacon as NearbyConnectionsInitiator;
 
     initiator.onDeviceFound = _onDeviceFoundHandler;
+    initiator.onDeviceLost = _onDeviceLostHandler;
     initiator.onClusterJoinedInitiatorSide =
         _onClusterJoinedInitiatorSideHandler;
     beacon.onStatusChange = _onStatusChangeHandler;
@@ -169,13 +170,49 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
 
-  void _onDeviceFoundHandler(Device d) {
-    final exists = availableDevices.any((x) => x.endpointId == d.endpointId);
-    if (!exists) {
-      availableDevices.add(d);
-      print("Device Found: ${d.deviceName} (${d.uuid})");
+  void _onDeviceFoundHandler() {
+    // load devices that are in range
+    DBService().database.then((db) async {
+      final results = await db.query(
+        "devices",
+        where: "inRange = ? AND uuid != ?",
+        whereArgs: [1, beacon.uuid],
+      );
+
+      // get cluster members to exclude connected ones
+      final clusterMembers = await db.query(
+        "cluster_members",
+        where: "clusterId = ?",
+        whereArgs: [currentCluster!.clusterId],
+      );
+
+      availableDevices = results
+          .map((map) => Device.fromMap(map))
+          .where((d) => !clusterMembers.any((cm) => cm['deviceUuid'] == d.uuid))
+          .toList();
+
       setState(() {});
-    }
+    });
+  }
+
+  void _onDeviceLostHandler() {
+    // get devices that are in range and not connected
+    DBService().database.then((db) async {
+      final results = await db.query(
+        "devices",
+        where: "inRange = ? AND uuid != ?",
+        whereArgs: [1, beacon.uuid],
+      );
+      // remove connected ones
+      availableDevices = results
+          .map((map) => Device.fromMap(map))
+          .where(
+            (d) => !connectedDevices.any((cd) => cd.endpointId == d.endpointId),
+          )
+          .toList();
+
+      setState(() {});
+    });
   }
 
   void _onClusterJoinedInitiatorSideHandler() async {
@@ -277,15 +314,32 @@ class _DashboardPageState extends State<DashboardPage>
     return rows.map((m) => Device.fromMap(m)).toList();
   }
 
-  void _onClusterFoundHandler(Map<String, String> clusterInfo) {
-    final clusterId = clusterInfo["clusterId"];
-    if (clusterId == null) return;
+  void _onClusterFoundHandler() async {
+    final db = await DBService().database;
+    final clusters = await db.query("clusters");
+    final clusterMembers = await db.query("cluster_members");
 
-    final exists = discoveredClusters.any((c) => c["clusterId"] == clusterId);
-    if (exists) return;
+    final sp = await SharedPreferences.getInstance();
+    final myUuid = sp.getString('device_uuid');
 
-    discoveredClusters.add(clusterInfo);
-    print("Cluster Found: $clusterInfo");
+    discoveredClusters = [];
+
+    for (var clusterMap in clusters) {
+      final clusterId = clusterMap['clusterId'] as String;
+
+      final isMember = clusterMembers.any(
+        (cm) => cm['clusterId'] == clusterId && cm['deviceUuid'] == myUuid,
+      );
+      if (isMember) continue;
+
+      discoveredClusters.add({
+        "clusterId": clusterId,
+        "clusterName": clusterMap['name'] as String,
+        "endpointId": clusterMap['ownerEndpointId'] as String,
+      });
+    }
+
+    print("Discovered Clusters: $discoveredClusters");
     setState(() {});
   }
 
@@ -334,11 +388,11 @@ class _DashboardPageState extends State<DashboardPage>
   Future<void> _disconnectFromCluster() async {
     final joiner = beacon as NearbyConnectionsJoiner;
     await joiner.disconnectFromCluster();
+    joinedCluster = null;
+    connectedDevicesToCluster.clear();
+    print("Disconnected from cluster");
 
-    setState(() {
-      joinedCluster = null;
-      connectedDevicesToCluster.clear();
-    });
+    setState(() {});
   }
 
   // SHARED HANDLERS
@@ -369,6 +423,7 @@ class _DashboardPageState extends State<DashboardPage>
           ),
           TextButton(
             onPressed: () async {
+              print('user accepting response');
               Navigator.pop(dialogContext);
 
               final joiner = beacon as NearbyConnectionsJoiner;
@@ -379,6 +434,9 @@ class _DashboardPageState extends State<DashboardPage>
                 "clusterId": clusterId,
                 "deviceUuid": beacon.uuid,
               }, conflictAlgorithm: ConflictAlgorithm.ignore);
+
+              print(joinedCluster);
+              print(connectedDevicesToCluster);
             },
             child: const Text("Join"),
           ),
@@ -414,6 +472,8 @@ class _DashboardPageState extends State<DashboardPage>
     for (var d in devices) {
       print("  - ${d['deviceName']} (UUID: ${d['uuid']})");
       print("      Endpoint ID: ${d['endpointId']}");
+      print("      Status: ${d['status']}");
+      print("      In_Range: ${d['inRange']}");
     }
 
     print("\nClusters (${clusters.length}):");

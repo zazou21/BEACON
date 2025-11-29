@@ -43,6 +43,8 @@ linux/**/build/
 macos/**/build/
 windows/**/build/
 web/.dart_tool/     # web tool cache
+.flutter-plugins-dependencies
+.flutter-plugins
 
 
 # iOS related
@@ -63,3 +65,9 @@ web/.dart_tool/     # web tool cache
 !default.mode2v3
 !default.perspectivev3
 **/*sync/
+
+
+macos/Flutter/GeneratedPluginRegistrant.swift
+windows/flutter/generated_plugin_registrant.cc
+windows/flutter/generated_plugin_registrant.h
+windows/flutter/generated_plugins.cmake

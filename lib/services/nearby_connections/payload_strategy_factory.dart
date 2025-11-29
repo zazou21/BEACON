@@ -1,20 +1,42 @@
 import 'payload_strategy.dart';
-import 'handshake_payload_strategy.dart';
+import 'cluster_info_payload_strategy.dart';
+import 'mark_offline_payload_strategy.dart';
+import 'mark_online_payload_strategy.dart';
+import 'nearby_connections.dart';
 
 class PayloadStrategyFactory {
-  static PayloadStrategy getHandler(String data) {
-    if (data.startsWith("HANDSHAKE:")) {
-      return HandshakePayloadStrategy();
+  // Store beacon instance for dependency injection
+  static NearbyConnectionsBase? _beacon;
+
+  // Initialize factory with beacon instance
+  static void initialize(NearbyConnectionsBase beacon) {
+    _beacon = beacon;
+  }
+
+  static PayloadStrategy getHandler(String type) {
+    if (_beacon == null) {
+      throw StateError(
+        'PayloadStrategyFactory not initialized. Call initialize() first.',
+      );
     }
 
-    // Fallback (optional)
-    return _EmptyPayloadStrategy();
+    switch (type) {
+      case "MARK_OFFLINE":
+        return MarkOfflinePayloadStrategy(_beacon!);
+      case "MARK_ONLINE":
+        return MarkOnlinePayloadStrategy(_beacon!);
+      case "CLUSTER_INFO":
+        return ClusterInfoPayloadStrategy(_beacon!);
+      default:
+        return UnknownPayloadStrategy();
+    }
   }
 }
 
-class _EmptyPayloadStrategy implements PayloadStrategy {
+// Fallback for unknown message types
+class UnknownPayloadStrategy implements PayloadStrategy {
   @override
-  void handle(String data, String endpointId) {
-    print("No matching payload strategy for: $data");
+  Future<void> handle(String endpointId, Map<String, dynamic> data) async {
+    print("Unknown payload type received from $endpointId");
   }
 }

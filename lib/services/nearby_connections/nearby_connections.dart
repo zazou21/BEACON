@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:nearby_connections/nearby_connections.dart';
 import 'package:beacon_project/models/device.dart';
 import 'package:beacon_project/models/cluster.dart';
@@ -10,10 +11,13 @@ import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:beacon_project/services/nearby_connections/payload_strategy_factory.dart';
 
-// Helper small data classes for clarity
+part 'nearby_connection_initiator.dart';
+part 'nearby_connection_joiner.dart';
+
 class PendingConnection {
-  final String remoteUuid; // joiner or owner depending on flow
+  final String remoteUuid;
   final String clusterId;
   PendingConnection(this.remoteUuid, this.clusterId);
 }
@@ -24,35 +28,32 @@ class PendingInvite {
   PendingInvite(this.joinerUuid, this.clusterId);
 }
 
-class NearbyConnections {
-  static final NearbyConnections _instance = NearbyConnections._internal();
-  factory NearbyConnections() => _instance;
-  NearbyConnections._internal();
-
+abstract class NearbyConnectionsBase extends ChangeNotifier {
   static const STRATEGY = Strategy.P2P_CLUSTER;
   static const SERVICE_ID = "com.beacon.emergency";
 
-  final List<String> connectedEndpoints = [];
+  // Shared state
+  final Map<String, String> _activeConnections = {};
+  final List<String> _connectedEndpoints = [];
 
   late String deviceName;
   late String uuid;
 
-  void Function(Device device)? onDeviceFound;
-  void Function(String endpointId, ConnectionInfo info)? onConnectionRequest;
-  void Function(String endpointId, Map<String, dynamic> message)? onControlMessage;
-  void Function(Map<String, String> cluster)? onClusterFound;
-  void Function(String clusterId)? onClusterJoinedInitiatorSide;
-  void Function(String clusterId)? onClusterJoinedJoinerSide;
+  // Getters for reactive state
+  List<String> get connectedEndpoints => List.unmodifiable(_connectedEndpoints);
+  Map<String, String> get activeConnections => Map.unmodifiable(_activeConnections);
 
   Future<void> init() async {
     deviceName = await _getDeviceName();
     uuid = await _getDeviceUUID();
+    PayloadStrategyFactory.initialize(this);
+    notifyListeners();
   }
 
   Future<String> _getDeviceName() async {
     try {
       final androidInfo = await DeviceInfoPlugin().androidInfo;
-      return androidInfo.model ?? "unknown";
+      return androidInfo.model;
     } catch (_) {
       return "unknown";
     }
@@ -68,7 +69,7 @@ class NearbyConnections {
     return stored;
   }
 
-  Future<bool> _requestNearbyPermissions() async {
+  Future<bool> requestNearbyPermissions() async {
     final List<Permission> permissions = [
       Permission.locationWhenInUse,
       Permission.bluetooth,
@@ -76,7 +77,7 @@ class NearbyConnections {
 
     if (Platform.isAndroid) {
       final info = await DeviceInfoPlugin().androidInfo;
-      int sdkInt = info.version.sdkInt ?? 0;
+      int sdkInt = info.version.sdkInt;
       if (sdkInt >= 31) {
         permissions.addAll([
           Permission.bluetoothScan,
@@ -91,533 +92,53 @@ class NearbyConnections {
     return statuses.values.every((s) => s.isGranted);
   }
 
-  // ================= pending maps & state =================
-  final Map<String, PendingConnection> _pendingConnections = {};
-  final Map<String, PendingInvite> _pendingInvites = {};
-  final Map<String, String> _activeConnections = {}; // endpointId -> deviceUuid
-
-  // ================= INITIATOR FLOW =================
-  // initiator device creates the cluster & adds himself
-  // start discovering so he can see joiners he can invite
-  // start advertising the cluster he created so joiners can find him
-  Future<void> initiateCommunication() async {
-    if (!await _requestNearbyPermissions()) return;
-
-    final db = await DBService().database;
-    final clusterId = const Uuid().v4();
-    final cluster = Cluster(
-      clusterId: clusterId,
-      ownerUuid: uuid,
-      name: "$deviceName's Network",
-    );
-
-    try {
-      await db.transaction((txn) async {
-        await txn.insert('clusters', cluster.toMap(), conflictAlgorithm: ConflictAlgorithm.ignore);
-        await txn.insert('cluster_members', {
-          'clusterId': clusterId,
-          'deviceUuid': uuid,
-        }, conflictAlgorithm: ConflictAlgorithm.ignore);
-      });
-    } catch (e) {
-      print('[Nearby] DB error while creating cluster: $e');
-    }
-
-    await _startAdvertisingInitiator(clusterId, cluster.name);
-    await _startDiscoveryInitiator();
-  }
-
-  // advertise the created cluster
-  Future<void> _startAdvertisingInitiator(String clusterId, String clusterName) async {
-    final endpointName = "$uuid|$clusterId"; // format: <ownerUuid>|<clusterId>
-    try {
-      await Nearby().startAdvertising(
-        endpointName,
-        STRATEGY,
-        serviceId: SERVICE_ID,
-        onConnectionInitiated: _onConnectionInitiatedInitiator,
-        onConnectionResult: _onConnectionResultInitiatorSide,
-        onDisconnected: _onDisconnectedInitiatorSide,
-      );
-    } catch (e) {
-      print('[Nearby] startAdvertising initiator error: $e');
-    }
-  }
-
-  void _onConnectionInitiatedInitiator(String endpointId, ConnectionInfo info) async {
-    try {
-      final parts = info.endpointName.split('|');
-      if (parts.length < 2) {
-        print('[Nearby] initiator: bad endpointName format: ${info.endpointName}');
-        return;
-      }
-      final joinerUuid = parts[0];
-      final clusterId = parts[1];
-
-      // store for onConnectionResult
-      _pendingConnections[endpointId] = PendingConnection(joinerUuid, clusterId);
-
-      await Nearby().acceptConnection(
-        endpointId,
-        onPayLoadRecieved: _onPayloadReceived,
-        onPayloadTransferUpdate: _onPayloadUpdate,
-      );
-    } catch (e, st) {
-      print('[Nearby] _onConnectionInitiatedInitiator error: $e\n$st');
-      _pendingConnections.remove(endpointId);
-    }
-  }
-
-  void _onConnectionResultInitiatorSide(String endpointId, Status status) async {
-    if (status != Status.CONNECTED) {
-      _pendingConnections.remove(endpointId); // cleanup
-      return;
-    }
-
-    final data = _pendingConnections.remove(endpointId);
-    if (data == null) return;
-
-    final joinerUuid = data.remoteUuid;
-    final clusterId = data.clusterId;
-
-    try {
-      final db = await DBService().database;
-      await db.transaction((txn) async {
-        await txn.update(
-          "devices",
-          {"status": "Connected", "lastSeen": DateTime.now().toIso8601String()},
-          where: "uuid = ?",
-          whereArgs: [joinerUuid],
-        );
-
-        await txn.insert("cluster_members", {
-          "clusterId": clusterId,
-          "deviceUuid": joinerUuid,
-        }, conflictAlgorithm: ConflictAlgorithm.ignore);
-      });
-
-      _activeConnections[endpointId] = joinerUuid;
-      if (!connectedEndpoints.contains(endpointId)) connectedEndpoints.add(endpointId);
-
-      onClusterJoinedInitiatorSide?.call(clusterId);
-    } catch (e) {
-      print('[Nearby] _onConnectionResultInitiatorSide db error: $e');
-    }
-  }
-
-  void _onDisconnectedInitiatorSide(String endpointId) async {
-    print("Initiator side disconnected: $endpointId");
-    final devUuid = _activeConnections.remove(endpointId);
-    connectedEndpoints.remove(endpointId);
-    if (devUuid == null) return;
-    try {
-      final db = await DBService().database;
-      await db.update(
-        "devices",
-        {"status": "Disconnected", "lastSeen": DateTime.now().toIso8601String()},
-        where: "uuid = ?",
-        whereArgs: [devUuid],
-      );
-    } catch (e) {
-      print('[Nearby] disconnect cleanup error: $e');
-    }
-  }
-
-  // joiner presses join on discovered cluster
-  // this fn is called from UI
-  Future<void> joinCluster(String endpointId, String clusterId) async {
-    final nameToSend = "$uuid|$clusterId"; // format expected by initiator
-    try {
-      await Nearby().requestConnection(
-        nameToSend,
-        endpointId,
-        onConnectionInitiated: (id, info) async {
-          print('joiner accepted connection initiation');
-          await Nearby().acceptConnection(
-            id,
-            onPayLoadRecieved: _onPayloadReceived,
-            onPayloadTransferUpdate: _onPayloadUpdate,
-          );
-        },
-        onConnectionResult: (id, status) async {
-          print("Joiner result: $status");
-          if (status != Status.CONNECTED) return;
-
-          final db = await DBService().database;
-          try {
-            await db.transaction((txn) async {
-              await txn.insert(
-                "clusters",
-                Cluster(
-                  clusterId: clusterId,
-                  ownerUuid: "", // owner unknown here; could be updated later
-                  name: "Joined Cluster",
-                ).toMap(),
-                conflictAlgorithm: ConflictAlgorithm.ignore,
-              );
-              await txn.insert("cluster_members", {
-                "clusterId": clusterId,
-                "deviceUuid": uuid,
-              }, conflictAlgorithm: ConflictAlgorithm.ignore);
-            });
-          } catch (e) {
-            print('[Nearby] joinCluster DB error: $e');
-          }
-
-          _activeConnections[id] = endpointId; // store mapping to help cleanup
-          if (!connectedEndpoints.contains(id)) connectedEndpoints.add(id);
-
-          onClusterJoinedJoinerSide?.call(clusterId);
-        },
-        onDisconnected: (id) {
-          print("Joiner disconnected: $id");
-          final devUuid = _activeConnections.remove(id);
-          connectedEndpoints.remove(id);
-        },
-      );
-    } catch (e) {
-      print("[Nearby] requestConnection error: $e");
-    }
-  }
-
-  // start discovering available devices so he can invite them to join his cluster
-  Future<void> _startDiscoveryInitiator() async {
-    try {
-      await Nearby().startDiscovery(
-        deviceName,
-        STRATEGY,
-        serviceId: SERVICE_ID,
-        onEndpointFound: _onEndpointFound,
-        onEndpointLost: _onEndpointLost,
-      );
-    } catch (e) {
-      print('[Nearby] startDiscovery initiator error: $e');
-    }
-  }
-
-  // when a device is found during discovery
-  // save it to database and notify UI to update available devices list
-  void _onEndpointFound(String endpointId, String endpointName, String serviceId) async {
-    final parts = endpointName.split('|');
-    if (parts.length < 2) return;
-    final devUuid = parts[0];
-    final name = parts[1];
-
-    final device = Device(
-      uuid: devUuid,
-      deviceName: name,
-      endpointId: endpointId,
-      status: "Available",
-      lastSeen: DateTime.now(),
-    );
-
-    try {
-      final db = await DBService().database;
-      await db.insert(
-        "devices",
-        device.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-    } catch (e) {
-      print('[Nearby] insert device error: $e');
-    }
-
-    onDeviceFound?.call(device);
-  }
-
-  void _onEndpointLost(String? endpointId) async {
-    // optional: mark device as lost in DB
-  }
-
-  // ================= JOINER FLOW =================
-  // joiner device looks for available clusters to join
-  // start advertising so initiator can find him and invite him
-  Future<void> joinCommunication() async {
-    if (!await _requestNearbyPermissions()) return;
-    await _startAdvertisingJoiner();
-    await _startDiscoveryJoiner();
-  }
-
-  // advertise self so initiator can find him and invite him
-  Future<void> _startAdvertisingJoiner() async {
-    final endpointName = "$uuid|$deviceName"; // <uuid>|<name>
-
-    try {
-      await Nearby().startAdvertising(
-        endpointName,
-        STRATEGY,
-        serviceId: SERVICE_ID,
-        onConnectionInitiated: _onConnectionInitiatedJoiner,
-        onConnectionResult: _onConnectionResultJoiner,
-        onDisconnected: _onDisconnectedJoiner,
-      );
-    } catch (e) {
-      print('[Nearby] startAdvertising joiner error: $e');
-    }
-  }
-
-  void _onConnectionInitiatedJoiner(String endpointId, ConnectionInfo info) {
-    final parts = info.endpointName.split('|'); // <ownerUuid>|<clusterId>
-    if (parts.length < 2) {
-      print('[Nearby] joiner: bad endpoint name: ${info.endpointName}');
-      return;
-    }
-    final ownerUuid = parts[0];
-    final clusterId = parts[1];
-
-    _pendingConnections[endpointId] = PendingConnection(ownerUuid, clusterId);
-
-    // info.endpointName contains <initiatorUuid>|<clusterId>
-    onConnectionRequest?.call(endpointId, info); // show invite dialog
-  }
-
-  // called from ui when joiner accepts the invite
-  Future<void> acceptInvite(String endpointId) async {
-    try {
-      await Nearby().acceptConnection(
-        endpointId,
-        onPayLoadRecieved: _onPayloadReceived,
-        onPayloadTransferUpdate: _onPayloadUpdate,
-      );
-    } catch (e) {
-      print('[Nearby] acceptInvite error: $e');
-    }
-  }
-
-  void _onConnectionResultJoiner(String endpointId, Status status) async {
-    print("Joiner result: $status");
-
-    if (status != Status.CONNECTED) return;
-
-    final data = _pendingConnections.remove(endpointId);
-    if (data == null) return;
-    final ownerUuid = data.remoteUuid;
-    final clusterId = data.clusterId;
-
-    try {
-      final db = await DBService().database;
-      await db.transaction((txn) async {
-        await txn.insert(
-          "clusters",
-          Cluster(
-            clusterId: clusterId,
-            ownerUuid: ownerUuid,
-            name: "Joined Cluster",
-          ).toMap(),
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
-        await txn.insert("cluster_members", {
-          "clusterId": clusterId,
-          "deviceUuid": uuid,
-        }, conflictAlgorithm: ConflictAlgorithm.ignore);
-      });
-
-      _activeConnections[endpointId] = ownerUuid;
-      if (!connectedEndpoints.contains(endpointId)) connectedEndpoints.add(endpointId);
-
-      onClusterJoinedJoinerSide?.call(clusterId);
-
-      print("Joiner connected to initiator $ownerUuid");
-    } catch (e) {
-      print('[Nearby] _onConnectionResultJoiner db error: $e');
-    }
-  }
-
-  void _onDisconnectedJoiner(String endpointId) async {
-    print("Joiner disconnected: $endpointId");
-    final devUuid = _activeConnections.remove(endpointId);
-    connectedEndpoints.remove(endpointId);
-    if (devUuid == null) return;
-    try {
-      final db = await DBService().database;
-      await db.update(
-        "devices",
-        {"status": "Disconnected", "lastSeen": DateTime.now().toIso8601String()},
-        where: "uuid = ?",
-        whereArgs: [devUuid],
-      );
-    } catch (e) {
-      print('[Nearby] joiner disconnect cleanup error: $e');
-    }
-  }
-
-  Future<void> inviteToCluster(String endpointId, String clusterId) async {
-    final name = "$uuid|$clusterId"; // initiatorUuid|clusterId
-
-    // store clusterId in pending invites BEFORE requesting connection so it's available later
-    _pendingInvites[endpointId] = PendingInvite('', clusterId);
-
-    try {
-      await Nearby().requestConnection(
-        name,
-        endpointId,
-        onConnectionInitiated: _onConnectionInitiatedInitiatorSideOfInvite,
-        onConnectionResult: _onConnectionResultInitiatorSideOfInvite,
-        onDisconnected: _onDisconnectedInitiatorSideOfInvite,
-      );
-    } catch (e) {
-      print('[Nearby] inviteToCluster error: $e');
-      _pendingInvites.remove(endpointId);
-    }
-  }
-
-  void _onConnectionInitiatedInitiatorSideOfInvite(String endpointId, ConnectionInfo info) async {
-    try {
-      final parts = info.endpointName.split('|'); // joinerUuid|deviceName
-      if (parts.isEmpty) return;
-      final joinerUuid = parts[0];
-
-      final existing = _pendingInvites[endpointId];
-      final clusterId = existing?.clusterId ?? '';
-
-      _pendingInvites[endpointId] = PendingInvite(joinerUuid, clusterId);
-
-      await Nearby().acceptConnection(
-        endpointId,
-        onPayLoadRecieved: _onPayloadReceived,
-        onPayloadTransferUpdate: _onPayloadUpdate,
-      );
-    } catch (e) {
-      print('[Nearby] _onConnectionInitiatedInitiatorSideOfInvite error: $e');
-      _pendingInvites.remove(endpointId);
-    }
-  }
-
-  void _onConnectionResultInitiatorSideOfInvite(String endpointId, Status status) async {
-    if (status != Status.CONNECTED) {
-      _pendingInvites.remove(endpointId);
-      return;
-    }
-
-    final data = _pendingInvites.remove(endpointId);
-    if (data == null) return;
-
-    final joinerUuid = data.joinerUuid;
-    final clusterId = data.clusterId;
-
-    try {
-      final db = await DBService().database;
-      await db.transaction((txn) async {
-        await txn.update(
-          "devices",
-          {"status": "Connected", "lastSeen": DateTime.now().toIso8601String()},
-          where: "uuid = ?",
-          whereArgs: [joinerUuid],
-        );
-
-        await txn.insert("cluster_members", {
-          "clusterId": clusterId,
-          "deviceUuid": joinerUuid,
-        }, conflictAlgorithm: ConflictAlgorithm.ignore);
-      });
-
-      _activeConnections[endpointId] = joinerUuid;
-      if (!connectedEndpoints.contains(endpointId)) connectedEndpoints.add(endpointId);
-
-      onClusterJoinedInitiatorSide?.call(clusterId);
-
-      print('[Nearby] Joiner $joinerUuid added to cluster $clusterId');
-    } catch (e) {
-      print('[Nearby] _onConnectionResultInitiatorSideOfInvite db error: $e');
-    }
-  }
-
-  void _onDisconnectedInitiatorSideOfInvite(String endpointId) async {
-    print("Initiator side disconnected: $endpointId");
-
-    final devUuid = _activeConnections.remove(endpointId);
-    connectedEndpoints.remove(endpointId);
-    if (devUuid == null) return;
-
-    try {
-      final db = await DBService().database;
-      await db.update(
-        "devices",
-        {"status": "Disconnected", "lastSeen": DateTime.now().toIso8601String()},
-        where: "uuid = ?",
-        whereArgs: [devUuid],
-      );
-    } catch (e) {
-      print('[Nearby] disconnect cleanup error: $e');
-    }
-  }
-
-  Future<void> _startDiscoveryJoiner() async {
-    try {
-      await Nearby().startDiscovery(
-        deviceName,
-        STRATEGY,
-        serviceId: SERVICE_ID,
-        onEndpointFound: _onClusterFound,
-        onEndpointLost: _onClusterLost,
-      );
-    } catch (e) {
-      print('[Nearby] startDiscovery joiner error: $e');
-    }
-  }
-
-  void _onClusterFound(String endpointId, String endpointName, String serviceId) async {
-    final parts = endpointName.split('|'); // <ownerUuid>|<clusterId>
-    if (parts.length < 2) return;
-
-    final ownerUuid = parts[0];
-    final clusterId = parts[1];
-    final clusterName = "Network of $ownerUuid";
-
-    try {
-      final db = await DBService().database;
-      await db.insert(
-        "clusters",
-        Cluster(
-          clusterId: clusterId,
-          ownerUuid: ownerUuid,
-          name: clusterName,
-        ).toMap(),
-        conflictAlgorithm: ConflictAlgorithm.ignore,
-      );
-    } catch (e) {
-      print('[Nearby] insert cluster error: $e');
-    }
-
-    onClusterFound?.call({
-      "endpointId": endpointId,
-      "clusterId": clusterId,
-      "clusterName": clusterName,
-    });
-  }
-
-  void _onClusterLost(String? endpointId) {}
-
-  // ================= PAYLOAD HANDLING =================
-  void _onPayloadReceived(String endpointId, Payload payload) {
+  void onPayloadReceived(String endpointId, Payload payload) {
     try {
       if (payload.type == PayloadType.BYTES && payload.bytes != null) {
-        final data = jsonDecode(String.fromCharCodes(payload.bytes!));
-        if (data is Map) {
-          onControlMessage?.call(endpointId, Map<String, dynamic>.from(data as Map));
-        } else {
-          print('[Nearby] payload is not a JSON object from $endpointId');
+        final raw = String.fromCharCodes(payload.bytes!);
+        final decoded = jsonDecode(raw);
+
+        if (decoded is! Map) {
+          print("[Nearby] invalid message shape");
+          return;
         }
-        return;
+
+        final map = Map<String, dynamic>.from(decoded);
+        final type = map["type"];
+        final data = map["data"];
+
+        if (type == null || data == null || data is! Map) {
+          print("[Nearby] missing type/data");
+          return;
+        }
+
+        final handler = PayloadStrategyFactory.getHandler(type);
+        handler.handle(endpointId, Map<String, dynamic>.from(data));
       }
-      print('[Nearby] unsupported payload type from $endpointId: ${payload.type}');
     } catch (e) {
-      print('[Nearby] payload parse error from $endpointId: $e');
+      print("[Nearby] payload parse error: $e");
     }
   }
 
-  void sendControlMessage(String endpointId, Map<String, dynamic> message) {
+  Future<void> sendMessage(
+    String endpointId,
+    String type,
+    Map<String, dynamic> data,
+  ) async {
+    final payload = {"type": type, "data": data};
+    final jsonBytes = utf8.encode(jsonEncode(payload));
     try {
-      final json = jsonEncode(message);
-      Nearby().sendBytesPayload(endpointId, Uint8List.fromList(json.codeUnits));
+      await Nearby().sendBytesPayload(
+        endpointId,
+        Uint8List.fromList(jsonBytes),
+      );
     } catch (e) {
-      print('[Nearby] sendControlMessage error: $e');
+      print("[Nearby] sendMessage error: $e");
     }
   }
 
-  void _onPayloadUpdate(String endpointId, PayloadTransferUpdate update) {}
+  void onPayloadUpdate(String endpointId, PayloadTransferUpdate update) {}
 
-  // ================= STOP =================
   Future<void> stopAll() async {
     try {
       await Nearby().stopAdvertising();
@@ -627,9 +148,12 @@ class NearbyConnections {
       print('[Nearby] stopAll error: $e');
     }
 
-    connectedEndpoints.clear();
-    _pendingConnections.clear();
-    _pendingInvites.clear();
+    _connectedEndpoints.clear();
     _activeConnections.clear();
+    notifyListeners();
   }
+
+  Future<void> startCommunication();
+  Future<void> stopAdvertising();
+  Future<void> stopDiscovery();
 }

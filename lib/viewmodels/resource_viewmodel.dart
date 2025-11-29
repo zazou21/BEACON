@@ -28,19 +28,17 @@ class ResourceViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Load prefs once into the field (no local shadowing)
-      prefs = await SharedPreferences.getInstance();
+          prefs = await SharedPreferences.getInstance();
 
-      // Use same key your dashboard uses
+    
       final modeStr = prefs.getString('dashboard_mode');
       final isInitiator = modeStr == 'initiator';
 
-      // Pick correct beacon implementation
       beacon = isInitiator
           ? NearbyConnectionsInitiator()
           : NearbyConnectionsJoiner();
 
-      // Listen to beacon like in DashboardViewModel
+    
       beacon.addListener(_onBeaconStateChanged);
 
       await beacon.init();
@@ -56,8 +54,7 @@ class ResourceViewModel extends ChangeNotifier {
   }
 
   void _onBeaconStateChanged() async {
-    // When NearbyConnections state changes (cluster/members/resources updated),
-    // reload view data from DB.
+   
     try {
       await _reloadFromDb();
       notifyListeners();
@@ -118,7 +115,7 @@ class ResourceViewModel extends ChangeNotifier {
     return List.generate(maps.length, (i) => Device.fromMap(maps[i]));
   }
 
-  // ---------- ACTIONS: POST / REQUEST ----------
+ 
 
   Future<void> postResource(String name, String description) async {
     try {

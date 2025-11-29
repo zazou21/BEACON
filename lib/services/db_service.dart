@@ -1,5 +1,9 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+<<<<<<< HEAD
+=======
+import '../models/profile_model.dart';
+>>>>>>> Korkor
 
 class DBService {
   static final DBService _instance = DBService._internal();
@@ -14,7 +18,10 @@ class DBService {
     return _db!;
   }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> Korkor
   Future<Database> _initDB() async {
     final path = join(await getDatabasesPath(), 'app.db');
     return await openDatabase(
@@ -22,30 +29,49 @@ class DBService {
       version: 1,
       onCreate: (db, version) async {
         await db.execute("""
+<<<<<<< HEAD
          CREATE TABLE devices (
+=======
+        CREATE TABLE devices (
+>>>>>>> Korkor
           uuid TEXT PRIMARY KEY,
           deviceName TEXT,
           endpointId TEXT,
           status TEXT,
+<<<<<<< HEAD
           isOnline INTEGER DEFAULT 1,
           inRange INTEGER DEFAULT 1,     -- TRUE
+=======
+>>>>>>> Korkor
           lastSeen INTEGER,
           lastMessage TEXT,
           createdAt INTEGER,
           updatedAt INTEGER
+<<<<<<< HEAD
         )        
       """);
+=======
+        )
+        """);
+>>>>>>> Korkor
 
         await db.execute("""
         CREATE TABLE clusters (
           clusterId TEXT PRIMARY KEY,
           ownerUuid TEXT,
+<<<<<<< HEAD
           ownerEndpointId TEXT,
+=======
+>>>>>>> Korkor
           name TEXT,
           createdAt INTEGER,
           updatedAt INTEGER
         )
+<<<<<<< HEAD
       """);
+=======
+        """);
+>>>>>>> Korkor
 
         await db.execute("""
         CREATE TABLE cluster_members (
@@ -56,6 +82,7 @@ class DBService {
           FOREIGN KEY(clusterId) REFERENCES clusters(clusterId),
           FOREIGN KEY(deviceUuid) REFERENCES devices(uuid)
         )
+<<<<<<< HEAD
       """);
 
 
@@ -77,6 +104,63 @@ class DBService {
       },
     );
   }
+=======
+        """);
+
+        await db.execute("""
+        CREATE TABLE profile (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          fullName TEXT NOT NULL,
+          phone TEXT NOT NULL,
+          emergencyName TEXT NOT NULL,
+          emergencyPhone TEXT NOT NULL,
+          location TEXT,
+          createdAt INTEGER,
+          updatedAt INTEGER
+        )
+        """);
+      },
+    );
+  }
+
+  // ---------------- Profile Helpers ----------------
+
+  Future<int> insertProfile(ProfileModel profile) async {
+    final db = await database;
+    // Check if profile already exists
+    final existing = await db.query('profile', limit: 1);
+    if (existing.isEmpty) {
+      return await db.insert('profile', profile.toMap());
+    } else {
+      // update the existing profile
+      return await db.update('profile', profile.toMap(), where: 'id = ?', whereArgs: [existing.first['id']]);
+    }
+  }
+
+  Future<ProfileModel?> getProfile() async {
+    final db = await database;
+    final result = await db.query('profile', limit: 1);
+    if (result.isNotEmpty) {
+      return ProfileModel.fromMap(result.first);
+    }
+    return null;
+  }
+
+  Future<int> updateProfile(ProfileModel profile) async {
+    final db = await database;
+    return await db.update(
+      'profile',
+      profile.toMap(),
+      where: 'id = ?',
+      whereArgs: [profile.id],
+    );
+  }
+
+  Future<int> deleteProfile() async {
+    final db = await database;
+    return await db.delete('profile');
+  }
+>>>>>>> Korkor
 }
 
 // how to use in other screens

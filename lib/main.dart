@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-<<<<<<< HEAD
 import 'package:go_router/go_router.dart';
 import 'theme.dart';
 import 'screens/dashboard_page.dart';
@@ -12,12 +11,6 @@ import 'services/db_service.dart';
 void main() {
   runApp(const BeaconApp());
 }
-=======
-import 'package:beacon_project/theme.dart';
-import 'package:beacon_project/screens/resources_page.dart';
-
-void main() => runApp(const MyApp());
->>>>>>> 99fbd7599c6056eca4408b936583473a9d0e3fb0
 
 class BeaconApp extends StatefulWidget {
   const BeaconApp({super.key});
@@ -35,7 +28,6 @@ class _BeaconAppState extends State<BeaconApp> {
 
   @override
   Widget build(BuildContext context) {
-<<<<<<< HEAD
     return MaterialApp.router(
       title: 'BEACON',
       theme: currentTheme,
@@ -396,14 +388,3 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 }
-=======
-    return MaterialApp(
-      title: 'Beacon Project',
-      theme: lightTheme(),
-      darkTheme: darkTheme(),
-      themeMode: ThemeMode.system,
-      home: const ResourcePage(),
-    );
-  }
-}
->>>>>>> 99fbd7599c6056eca4408b936583473a9d0e3fb0

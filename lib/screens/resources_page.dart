@@ -1,10 +1,8 @@
-import 'package:beacon_project/services/nearby_connections/nearby_connections.dart';
 import 'package:flutter/material.dart';
-import 'package:sqflite/sql.dart';
+import 'package:provider/provider.dart';
 import '../models/resource.dart';
-import '../services/db_service.dart';
-import 'package:uuid/uuid.dart';
-import 'package:beacon_project/models/device.dart';
+import '../models/device.dart';
+import '../viewmodels/resource_viewmodel.dart';
 
 // Optional: control tab order explicitly
 const List<ResourceType> resourceTabOrder = [
@@ -33,9 +31,7 @@ extension ResourceTypeUi on ResourceType {
       };
 }
 
-
-
-  String _timeAgo(DateTime dt) {
+String _timeAgo(DateTime dt) {
   final now = DateTime.now();
   final diff = now.difference(dt);
 
@@ -46,390 +42,220 @@ extension ResourceTypeUi on ResourceType {
 
   return "${dt.day}/${dt.month}/${dt.year}";
 }
-class ResourcePage extends StatefulWidget {
+
+class ResourcePage extends StatelessWidget {
   const ResourcePage({super.key});
-  @override
-  State<ResourcePage> createState() => _ResourcePageState();
-}
-
-class _ResourcePageState extends State<ResourcePage> {
-  ResourceType _selected = ResourceType.foodWater;
-  List<Resource>? resources;
-  late List<Device> connectedDevices;
-  String clusterId = '';
-
-  final db = DBService().database;
-  final beacon = NearbyConnections();
-
-  void _changeTab(ResourceType type) {
-    setState(() => _selected = type);
-  }
-
-  Future<String> getClusterId() async {
-    final database = await db;
-    final String deviceUuid = await beacon.uuid;
-
-    final result = await database.query(
-      'cluster_members',
-      columns: ['clusterId'],
-      where: 'deviceUuid = ?',       
-      whereArgs: [deviceUuid],
-    );
-
-    if (result.isNotEmpty) {
-      return result.first['clusterId'] as String;
-    }
-
-    return '';
-  }
-
-  Future<List<Resource>> fetchResources() async {
-    final database = await db;
-    final List<Map<String, dynamic>> maps =
-        await database.query('resources');
-
-    debugPrint('Fetched ${maps.length} resources from database');
-
-    if (maps.isEmpty){
-      debugPrint('No resources found in database');
-      return [];
-    }
-
-
-    return List.generate(maps.length, (i) {
-      return Resource.fromMap(maps[i]);
-    });
-  }
-
- 
-  Future<List<Device>> fetchConnectedDevices() async {
-    final database = await db;
-    final String deviceUuid = await beacon.uuid;
-
-  
-    final joined = await database.query(
-      'cluster_members',
-      columns: ['clusterId'],
-      where: 'deviceUuid = ?',     
-      whereArgs: [deviceUuid],
-    );
-
-    if (joined.isEmpty) {
-      return [];
-    }
-
-    clusterId = joined.first['clusterId'] as String;
-
-    final List<Map<String, dynamic>> maps = await database.query(
-      'devices',
-      where:
-          'uuid IN (SELECT deviceUuid FROM cluster_members WHERE clusterId = ?)',
-      whereArgs: [clusterId],
-    );
-
-    debugPrint(
-        'Fetched ${maps.length} connected devices for cluster $clusterId');
-
-    return List.generate(maps.length, (i) {
-      return Device.fromMap(maps[i]);
-    });
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _init();
-  }
-
-  Future<void> _init() async {
-    await beacon.init();
-
-    final res = await fetchResources();
-    final devices = await fetchConnectedDevices();
-
-    if (!mounted) return;
-    setState(() {
-      resources = res;
-      connectedDevices = devices;
-    });
-  }
-
-  
-
-  void _showResourceDetails(BuildContext context, Resource resource) {
-  final Device? owner = connectedDevices.firstWhere(
-    (d) => d.uuid == resource.userUuid,
-    orElse: () => Device(
-      uuid: resource.userUuid,
-      deviceName: "Unknown device",
-      endpointId: "",
-      status: "Unknown",
-      lastSeen: DateTime.now(),
-    ),
-  );
-
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
-    builder: (context) {
-      return Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 20),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade400,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-
-            Text(
-              resource.resourceName,
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-
-            const SizedBox(height: 10),
-
-            // Posted/requested by
-            Text(
-              resource.resourceStatus == ResourceStatus.posted
-                  ? "Posted by:"
-                  : "Requested by:",
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-
-            const SizedBox(height: 6),
-
-            Text(
-              "${owner!.deviceName} (${owner.uuid})",
-              style: TextStyle(color: Colors.grey.shade700),
-            ),
-
-            const SizedBox(height: 6),
-
-            Text(
-              "Last seen: ${_timeAgo(owner.lastSeen)}",
-              style: TextStyle(color: Colors.grey.shade700),
-            ),
-
-            const Divider(height: 30),
-
-            // Resource details
-            Text(
-              "Description",
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 6),
-            Text(resource.resourceDescription),
-
-            const SizedBox(height: 16),
-
-            Text(
-              "Status: ${resource.resourceStatus.name}",
-              style: TextStyle(color: Colors.grey.shade700),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              "Created: ${_timeAgo(resource.createdAt)}",
-              style: TextStyle(color: Colors.grey.shade700),
-            ),
-
-            const SizedBox(height: 30),
-
-            // Chat button
-            Center(
-              child: ElevatedButton.icon(
-                onPressed: () {}, // not implemented yet
-                icon: const Icon(Icons.chat),
-                label: const Text("Open Chat"),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 40,
-                    vertical: 14,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 20),
-          ],
-        ),
-      );
-    },
-  );
-}
-
-  Future<void> _postResource(String description, String name) async {
-    try {
-      final database = await db;
-      String userUuid = beacon.uuid;
-
-      final newResource = Resource(
-        resourceName: name,
-        resourceStatus: ResourceStatus.posted,
-        resourceId: const Uuid().v4(),
-        resourceType: _selected,
-        resourceDescription: description,
-        createdAt: DateTime.now(),
-        userUuid: userUuid,
-      );
-
-      await database.insert(
-        'resources',
-        newResource.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-
-      for (final device in connectedDevices) {
-        if (device.uuid == userUuid) continue;
-
-        await beacon.sendMessage(
-          device.endpointId,
-          'RESOURCES',
-          {'resources': [newResource.toMap()]},
-        );
-      }
-    } catch (e) {
-      debugPrint('Error posting resource: $e');
-    }
-  }
-
-  Future<void> _requestResource(String description, String name) async {
-    try {
-      final database = await db;
-      String userUuid = beacon.uuid;
-
-      final newResource = Resource(
-        resourceName: name,
-        resourceStatus: ResourceStatus.requested,
-        resourceId: const Uuid().v4(),
-        resourceType: _selected,
-        resourceDescription: description,
-        createdAt: DateTime.now(),
-        userUuid: userUuid,
-      );
-
-      await database.insert(
-        'resources',
-        newResource.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-
-      for (final device in connectedDevices) {
-        if (device.uuid == userUuid) continue;
-
-        await beacon.sendMessage(
-          device.endpointId,
-          'RESOURCES',
-          {'resources': [newResource.toMap()]},
-        );
-      }
-    } catch (e) {
-      debugPrint('Error posting resource: $e');
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar:
-          AppBar(title: const Text('Share or request emergency resources')),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: ResourceTabs(
-              selected: _selected,
-              onChanged: _changeTab,
+    return ChangeNotifierProvider(
+      create: (_) => ResourceViewModel()..init(),
+      child: Consumer<ResourceViewModel>(
+        builder: (context, viewModel, child) {
+          return Scaffold(
+            appBar: AppBar(
+              title: const Text('Share or request emergency resources'),
             ),
-          ),
-
-          Expanded(
-          child: RefreshIndicator(
-          onRefresh: () async {
-            await _init(); // reload everything
-          },
-
-            child: ListView(
-              padding: const EdgeInsets.all(16),
+            body: Column(
               children: [
-                _SectionHeader(selected: _selected),
-                const SizedBox(height: 16),
-                PostRequestPanel(
-                  onPost: (name, desc) {
-                    debugPrint('Posting ${_labelFor(_selected)}: $name - $desc');
-                    if (connectedDevices.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                              'Join a cluster or wait for others to connect before posting resources.'),
-                        ),
-                      );
-                      return;
-                    }
-                    _postResource(desc, name);
-                  },
-                  onRequest: (name, desc) {
-                    debugPrint('Requesting ${_labelFor(_selected)}: $name - $desc');
-                    if (connectedDevices.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                              'Join a cluster or wait for others to connect before requesting resources.'),
-                        ),
-                      );
-                      return;
-                    }
-                    _requestResource(desc, name);
-                  },
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: ResourceTabs(
+                    selected: viewModel.selectedTab,
+                    onChanged: viewModel.changeTab,
+                  ),
                 ),
-
-
-                const SizedBox(height: 16),
-
-                Text(
-                  'Recent activity',
-                  style: Theme.of(context).textTheme.titleMedium,
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: viewModel.init,
+                    child: ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        _SectionHeader(selected: viewModel.selectedTab),
+                        const SizedBox(height: 16),
+                        PostRequestPanel(
+                          onPost: (name, desc) {
+                            if (viewModel.connectedDevices.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Join a cluster or wait for others to connect before posting resources.',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+                            viewModel.postResource(name, desc);
+                          },
+                          onRequest: (name, desc) {
+                            if (viewModel.connectedDevices.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Join a cluster or wait for others to connect before requesting resources.',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+                            viewModel.requestResource(name, desc);
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Recent activity',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        viewModel.isLoading
+                            ? const Center(child: CircularProgressIndicator())
+                            : RecentActivityList(
+                                items: viewModel.resources,
+                                onView: (resource) {
+                                  _showResourceDetails(
+                                    context,
+                                    resource,
+                                    viewModel.connectedDevices,
+                                  );
+                                },
+                                selected: viewModel.selectedTab,
+                              ),
+                      ],
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 8),
-  
-              if (resources == null)
-                const Center(child: CircularProgressIndicator())
-              else
-                RecentActivityList(
-                items: resources!,
-                onView: (resource) {
-                  _showResourceDetails(context, resource);
-                },
-                selected: _selected
-              ),
               ],
             ),
-          )
-          ),
-
-        ],
+          );
+        },
       ),
     );
-    
+  }
+
+  void _showResourceDetails(
+    BuildContext context,
+    Resource resource,
+    List<Device> connectedDevices,
+  ) {
+    final Device? owner = connectedDevices.firstWhere(
+      (d) => d.uuid == resource.userUuid,
+      orElse: () => Device(
+        uuid: resource.userUuid,
+        deviceName: "Unknown device",
+        endpointId: "",
+        status: "Unknown",
+        lastSeen: DateTime.now(),
+      ),
+    );
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade400,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+
+              Text(
+                resource.resourceName,
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+
+              const SizedBox(height: 10),
+
+              // Posted/requested by
+              Text(
+                resource.resourceStatus == ResourceStatus.posted
+                    ? "Posted by:"
+                    : "Requested by:",
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+
+              const SizedBox(height: 6),
+
+              Text(
+                "${owner!.deviceName} (${owner.uuid})",
+                style: TextStyle(color: Colors.grey.shade700),
+              ),
+
+              const SizedBox(height: 6),
+
+              Text(
+                "Last seen: ${_timeAgo(owner.lastSeen)}",
+                style: TextStyle(color: Colors.grey.shade700),
+              ),
+
+              const Divider(height: 30),
+
+              // Resource details
+              Text(
+                "Description",
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 6),
+              Text(resource.resourceDescription),
+
+              const SizedBox(height: 16),
+
+              Text(
+                "Status: ${resource.resourceStatus.name}",
+                style: TextStyle(color: Colors.grey.shade700),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                "Created: ${_timeAgo(resource.createdAt)}",
+                style: TextStyle(color: Colors.grey.shade700),
+              ),
+
+              const SizedBox(height: 30),
+
+              // Chat button
+              Center(
+                child: ElevatedButton.icon(
+                  onPressed: () {}, // not implemented yet
+                  icon: const Icon(Icons.chat),
+                  label: const Text("Open Chat"),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 40,
+                      vertical: 14,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 
-// ======================= UI CLASSES BELOW (UNCHANGED) =======================
+// ======================= UI WIDGETS =======================
+
 class PostRequestPanel extends StatefulWidget {
   const PostRequestPanel({
     super.key,
@@ -455,6 +281,15 @@ class _PostRequestPanelState extends State<PostRequestPanel> {
   final TextEditingController reqDescCtrl = TextEditingController();
 
   @override
+  void dispose() {
+    postNameCtrl.dispose();
+    postDescCtrl.dispose();
+    reqNameCtrl.dispose();
+    reqDescCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Card(
@@ -475,7 +310,7 @@ class _PostRequestPanelState extends State<PostRequestPanel> {
                 onPressed: () {
                   setState(() {
                     showPostForm = !showPostForm;
-                    showRequestForm = false; // close other form
+                    showRequestForm = false;
                   });
                 },
                 icon: const Icon(Icons.add),
@@ -530,7 +365,7 @@ class _PostRequestPanelState extends State<PostRequestPanel> {
                 onPressed: () {
                   setState(() {
                     showRequestForm = !showRequestForm;
-                    showPostForm = false; // close other form
+                    showPostForm = false;
                   });
                 },
                 icon: const Icon(Icons.send),
@@ -579,7 +414,6 @@ class _PostRequestPanelState extends State<PostRequestPanel> {
     );
   }
 }
-
 
 class ResourceTabs extends StatelessWidget {
   const ResourceTabs({
@@ -646,33 +480,31 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-String _labelFor(ResourceType t) => t.label;
-
-class ActivityItem {
-  final String title;
-  final String meta;
-  const ActivityItem({required this.title, required this.meta});
-}
-
 class RecentActivityList extends StatelessWidget {
-  const RecentActivityList({super.key, required this.items, this.onView,required this.selected});
+  const RecentActivityList({
+    super.key,
+    required this.items,
+    this.onView,
+    required this.selected,
+  });
 
   final void Function(Resource item)? onView;
   final List<Resource> items;
   final ResourceType selected;
 
-
-
-
   @override
   Widget build(BuildContext context) {
-    final sortedItems = [...items].where((r) => r.resourceType == selected).toList()
+    final sortedItems = [...items]
+        .where((r) => r.resourceType == selected)
+        .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
     if (sortedItems.isEmpty) {
       return const Center(
         child: Text('No recent activity'),
       );
     }
+
     return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -681,33 +513,30 @@ class RecentActivityList extends StatelessWidget {
       itemBuilder: (_, i) {
         final a = sortedItems[i];
         return Card(
-  elevation: 0,
-  child: ListTile(
-    onTap: onView == null ? null : () => onView!(a),  
-    leading: const CircleAvatar(
-      child: Icon(Icons.inventory_2_outlined),
-    ),
-    title: Text(a.resourceName),
-    subtitle: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(a.resourceDescription),
-        Text(
-          "Status: ${a.resourceStatus.name}",
-          style: const TextStyle(fontSize: 12, color: Colors.grey),
-        ),
-        Text(
-          _timeAgo(a.createdAt),
-          style: const TextStyle(fontSize: 12, color: Colors.grey),
-        ),
-      ],
-    ),
-    trailing: onView == null
-        ? null
-        : const Icon(Icons.chevron_right), 
-  ),
-);
-
+          elevation: 0,
+          child: ListTile(
+            onTap: onView == null ? null : () => onView!(a),
+            leading: const CircleAvatar(
+              child: Icon(Icons.inventory_2_outlined),
+            ),
+            title: Text(a.resourceName),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(a.resourceDescription),
+                Text(
+                  "Status: ${a.resourceStatus.name}",
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                Text(
+                  _timeAgo(a.createdAt),
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+            trailing: onView == null ? null : const Icon(Icons.chevron_right),
+          ),
+        );
       },
     );
   }

@@ -2,13 +2,18 @@ part of 'nearby_connections.dart';
 
 class NearbyConnectionsJoiner extends NearbyConnectionsBase {
   final Map<String, PendingConnection> _pendingConnections = {};
-  final List<String> availableClusters = [];
+  final List<Map<String, String>> _discoveredClusters = [];
 
-  Cluster? joinedCluster;
+  Cluster? _joinedCluster;
+  ConnectionInfo? _pendingInviteInfo;
+  String? _pendingInviteEndpointId;
 
-  void Function(String endpointId, ConnectionInfo info)? onConnectionRequest;
-  void Function()? onClusterFound;
-  void Function(String clusterId)? onClusterJoinedJoinerSide;
+  // Getters for reactive state
+  Cluster? get joinedCluster => _joinedCluster;
+  List<Map<String, String>> get discoveredClusters =>
+      List.unmodifiable(_discoveredClusters);
+  ConnectionInfo? get pendingInviteInfo => _pendingInviteInfo;
+  String? get pendingInviteEndpointId => _pendingInviteEndpointId;
 
   @override
   Future<void> startCommunication() async {
@@ -24,6 +29,16 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
 
     if (existing.isNotEmpty) {
       print('[Nearby] existing cluster membership found for joiner');
+      final clusterId = existing.first['clusterId'] as String;
+      final clusterMaps = await db.query(
+        "clusters",
+        where: "clusterId = ?",
+        whereArgs: [clusterId],
+      );
+      if (clusterMaps.isNotEmpty) {
+        _joinedCluster = Cluster.fromMap(clusterMaps.first);
+        notifyListeners();
+      }
       return;
     }
 
@@ -78,14 +93,14 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
     );
 
     _pendingConnections[endpointId] = PendingConnection(ownerUuid, clusterId);
-    print(_pendingConnections);
-    onConnectionRequest?.call(endpointId, info);
+    _pendingInviteEndpointId = endpointId;
+    _pendingInviteInfo = info;
+    notifyListeners();
   }
 
   Future<void> acceptInvite(String endpointId) async {
     try {
       print('[Nearby] acceptInvite: connection accepted for $endpointId');
-      print(_pendingConnections);
 
       final pending = _pendingConnections.remove(endpointId);
       if (pending == null) {
@@ -98,13 +113,11 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
 
       final db = await DBService().database;
 
-      // add membership
       await db.insert("cluster_members", {
         "clusterId": clusterId,
         "deviceUuid": uuid,
       }, conflictAlgorithm: ConflictAlgorithm.ignore);
 
-      // load cluster to set joinedCluster
       final clusterRow = await db.query(
         "clusters",
         where: "clusterId = ?",
@@ -113,13 +126,12 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
       );
 
       if (clusterRow.isNotEmpty) {
-        joinedCluster = Cluster.fromMap(clusterRow.first);
+        _joinedCluster = Cluster.fromMap(clusterRow.first);
       }
 
-      // register active connection
       _activeConnections[endpointId] = ownerUuid;
-      if (!connectedEndpoints.contains(endpointId)) {
-        connectedEndpoints.add(endpointId);
+      if (!_connectedEndpoints.contains(endpointId)) {
+        _connectedEndpoints.add(endpointId);
       }
 
       await Nearby().acceptConnection(
@@ -128,12 +140,22 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
         onPayloadTransferUpdate: onPayloadUpdate,
       );
 
-      onClusterJoinedJoinerSide?.call(clusterId);
+      _pendingInviteInfo = null;
+      _pendingInviteEndpointId = null;
+
+      await _loadDiscoveredClusters();
+      notifyListeners();
 
       print('[Nearby] acceptInvite: cluster joined successfully');
     } catch (e) {
       print('[Nearby] acceptInvite error: $e');
     }
+  }
+
+  void rejectInvite() {
+    _pendingInviteInfo = null;
+    _pendingInviteEndpointId = null;
+    notifyListeners();
   }
 
   void _onConnectionResult(String endpointId, Status status) async {
@@ -151,18 +173,17 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
     try {
       final db = await DBService().database;
 
-      // add membership
       await db.insert("cluster_members", {
         "clusterId": clusterId,
         "deviceUuid": uuid,
       }, conflictAlgorithm: ConflictAlgorithm.ignore);
 
       _activeConnections[endpointId] = ownerUuid;
-      if (!connectedEndpoints.contains(endpointId)) {
-        connectedEndpoints.add(endpointId);
+      if (!_connectedEndpoints.contains(endpointId)) {
+        _connectedEndpoints.add(endpointId);
       }
 
-      onClusterJoinedJoinerSide?.call(clusterId);
+      notifyListeners();
     } catch (e) {
       print('[Nearby] _onConnectionResult db error: $e');
     }
@@ -170,8 +191,8 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
 
   void _onDisconnected(String endpointId) async {
     final devUuid = _activeConnections.remove(endpointId);
-    connectedEndpoints.remove(endpointId);
-    joinedCluster = null;
+    _connectedEndpoints.remove(endpointId);
+    _joinedCluster = null;
 
     if (devUuid == null) return;
 
@@ -192,13 +213,14 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
         where: "deviceUuid = ?",
         whereArgs: [uuid],
       );
-      onClusterFound?.call();
+
+      await _loadDiscoveredClusters();
+      notifyListeners();
     } catch (e) {
       print('[Nearby] joiner disconnect cleanup error: $e');
     }
   }
 
-  // user pressed "join" on a cluster
   Future<void> joinCluster(
     String endpointId,
     String clusterId,
@@ -231,7 +253,7 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
 
             if (cluster.isNotEmpty) {
               print('[Nearby] joinCluster: cluster found in DB');
-              joinedCluster = Cluster.fromMap(cluster.first);
+              _joinedCluster = Cluster.fromMap(cluster.first);
             }
 
             db.insert("cluster_members", {
@@ -242,24 +264,26 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
             print('[Nearby] joinCluster DB error: $e');
           }
 
-          _activeConnections[id] = joinedCluster!.ownerUuid;
-          if (!connectedEndpoints.contains(id)) connectedEndpoints.add(id);
+          _activeConnections[id] = _joinedCluster!.ownerUuid;
+          if (!_connectedEndpoints.contains(id)) _connectedEndpoints.add(id);
 
-          onClusterJoinedJoinerSide?.call(clusterId);
+          await _loadDiscoveredClusters();
+          notifyListeners();
         },
-        onDisconnected: (id) {
+        onDisconnected: (id) async {
           final devUuid = _activeConnections.remove(id);
-          connectedEndpoints.remove(id);
-          joinedCluster = null;
+          _connectedEndpoints.remove(id);
+          _joinedCluster = null;
 
-          DBService().database.then(
-            (database) => database.delete(
-              "cluster_members",
-              where: "deviceUuid = ?",
-              whereArgs: [uuid],
-            ),
+          final db = await DBService().database;
+          await db.delete(
+            "cluster_members",
+            where: "deviceUuid = ?",
+            whereArgs: [uuid],
           );
-          onClusterFound?.call();
+
+          await _loadDiscoveredClusters();
+          notifyListeners();
         },
       );
     } catch (e) {
@@ -269,24 +293,24 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
 
   Future<void> disconnectFromCluster() async {
     print('[Nearby] disconnectFromCluster called');
-    if (joinedCluster == null) {
+    if (_joinedCluster == null) {
       print('[Nearby] No joined cluster to disconnect from');
       return;
     }
 
-    final clusterId = joinedCluster!.clusterId;
-    final ownerUuid = joinedCluster!.ownerUuid;
+    final clusterId = _joinedCluster!.clusterId;
+    final ownerUuid = _joinedCluster!.ownerUuid;
 
     print('[Nearby] Disconnecting from cluster $clusterId owned by $ownerUuid');
 
-    for (final endpointId in connectedEndpoints) {
+    for (final endpointId in _connectedEndpoints) {
       final devUuid = _activeConnections[endpointId];
       if (devUuid == ownerUuid) {
         await Nearby().disconnectFromEndpoint(endpointId);
       }
     }
 
-    connectedEndpoints.clear();
+    _connectedEndpoints.clear();
     _activeConnections.clear();
 
     final db = await DBService().database;
@@ -300,8 +324,7 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
       print('[Nearby] disconnectFromCluster DB error: $e');
     }
 
-    // capture ownerUuid first, then null
-    joinedCluster = null;
+    _joinedCluster = null;
 
     try {
       await db.update(
@@ -317,7 +340,8 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
       print('[Nearby] disconnectFromCluster cleanup error: $e');
     }
 
-    onClusterFound?.call();
+    await _loadDiscoveredClusters();
+    notifyListeners();
   }
 
   void _onClusterFoundHandler(
@@ -347,11 +371,38 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
         ).toMap(),
         conflictAlgorithm: ConflictAlgorithm.ignore,
       );
+
+      await _loadDiscoveredClusters();
+      notifyListeners();
     } catch (e) {
       print('[Nearby] insert cluster error: $e');
     }
+  }
 
-    onClusterFound?.call();
+  Future<void> _loadDiscoveredClusters() async {
+    final db = await DBService().database;
+    final clusters = await db.query("clusters");
+    final clusterMembers = await db.query("cluster_members");
+
+    final sp = await SharedPreferences.getInstance();
+    final myUuid = sp.getString('device_uuid');
+
+    _discoveredClusters.clear();
+
+    for (var clusterMap in clusters) {
+      final clusterId = clusterMap['clusterId'] as String;
+
+      final isMember = clusterMembers.any(
+        (cm) => cm['clusterId'] == clusterId && cm['deviceUuid'] == myUuid,
+      );
+      if (isMember) continue;
+
+      _discoveredClusters.add({
+        "clusterId": clusterId,
+        "clusterName": clusterMap['name'] as String,
+        "endpointId": clusterMap['ownerEndpointId'] as String,
+      });
+    }
   }
 
   void _onClusterLost(String? endpointId) {}

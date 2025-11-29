@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:nearby_connections/nearby_connections.dart';
 import 'package:beacon_project/models/device.dart';
 import 'package:beacon_project/models/cluster.dart';
@@ -15,9 +16,8 @@ import 'package:beacon_project/services/nearby_connections/payload_strategy_fact
 part 'nearby_connection_initiator.dart';
 part 'nearby_connection_joiner.dart';
 
-
 class PendingConnection {
-  final String remoteUuid; // joiner or owner depending on flow
+  final String remoteUuid;
   final String clusterId;
   PendingConnection(this.remoteUuid, this.clusterId);
 }
@@ -28,27 +28,26 @@ class PendingInvite {
   PendingInvite(this.joinerUuid, this.clusterId);
 }
 
-abstract class NearbyConnectionsBase {
+abstract class NearbyConnectionsBase extends ChangeNotifier {
   static const STRATEGY = Strategy.P2P_CLUSTER;
   static const SERVICE_ID = "com.beacon.emergency";
 
   // Shared state
   final Map<String, String> _activeConnections = {};
-  final List<String> connectedEndpoints = [];
+  final List<String> _connectedEndpoints = [];
 
   late String deviceName;
   late String uuid;
 
-  // Shared callbacks
-  void Function()? onStatusChange;
-  void Function(String endpointId, Map<String, dynamic> message)?
-  onControlMessage;
-  void Function()? onClusterInfoSent;
+  // Getters for reactive state
+  List<String> get connectedEndpoints => List.unmodifiable(_connectedEndpoints);
+  Map<String, String> get activeConnections => Map.unmodifiable(_activeConnections);
 
   Future<void> init() async {
     deviceName = await _getDeviceName();
     uuid = await _getDeviceUUID();
     PayloadStrategyFactory.initialize(this);
+    notifyListeners();
   }
 
   Future<String> _getDeviceName() async {
@@ -93,7 +92,6 @@ abstract class NearbyConnectionsBase {
     return statuses.values.every((s) => s.isGranted);
   }
 
-  // Shared payload handling
   void onPayloadReceived(String endpointId, Payload payload) {
     try {
       if (payload.type == PayloadType.BYTES && payload.bytes != null) {
@@ -150,13 +148,12 @@ abstract class NearbyConnectionsBase {
       print('[Nearby] stopAll error: $e');
     }
 
-    connectedEndpoints.clear();
+    _connectedEndpoints.clear();
     _activeConnections.clear();
+    notifyListeners();
   }
 
   Future<void> startCommunication();
   Future<void> stopAdvertising();
   Future<void> stopDiscovery();
 }
-
-

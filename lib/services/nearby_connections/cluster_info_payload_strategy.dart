@@ -8,74 +8,92 @@ import 'nearby_connections.dart';
 
 class ClusterInfoPayloadStrategy implements PayloadStrategy {
   final NearbyConnectionsBase beacon;
+
   ClusterInfoPayloadStrategy(this.beacon);
+
   @override
   Future<void> handle(String endpointId, Map<String, dynamic> data) async {
     print("Handling CLUSTER_INFO payload for endpointId: $endpointId");
+
     final clusterId = data['clusterId'] as String?;
     final devices = data['devices'] as List<dynamic>?;
     final members = data['members'] as List<dynamic>?;
 
-    if (clusterId == null || devices == null || members == null) return;
+    if (clusterId == null || devices == null || members == null) {
+      print("Error: Missing required fields in CLUSTER_INFO payload");
+      return;
+    }
 
-    final joinerUuid = await _getDeviceUUID();
-    final db = await DBService().database;
+    try {
+      final joinerUuid = await _getDeviceUUID();
+      final db = await DBService().database;
 
-    // Save devices
-    for (final d in devices) {
-      final deviceMap = Map<String, dynamic>.from(d);
+      // Save devices
+      for (final d in devices) {
+        final deviceMap = Map<String, dynamic>.from(d);
 
-      // skip joiner's own device
-      if (deviceMap['uuid'] == joinerUuid) continue;
+        // Skip joiner's own device
+        if (deviceMap['uuid'] == joinerUuid) continue;
 
-      //popule endpoint for sender
-      if (deviceMap['uuid'] == data['senderUuid']) {
-        deviceMap['endpointId'] = endpointId;
-      }
+        // Populate endpoint for sender
+        if (deviceMap['uuid'] == data['senderUuid']) {
+          deviceMap['endpointId'] = endpointId;
+        }
 
-      final existing = await db.query(
-        'devices',
-        where: 'uuid = ?',
-        whereArgs: [deviceMap['uuid']],
-      );
-
-      final device = Device(
-        uuid: deviceMap['uuid'],
-        deviceName: deviceMap['deviceName'] ?? "Unknown",
-        endpointId: deviceMap['endpointId'] ?? '',
-        status: "Connected",
-        lastSeen: DateTime.now(),
-      );
-
-      if (existing.isNotEmpty) {
-        await db.update(
+        final existing = await db.query(
           'devices',
-          device.toMap(),
           where: 'uuid = ?',
-          whereArgs: [device.uuid],
+          whereArgs: [deviceMap['uuid']],
+          limit: 1,
         );
-      } else {
-        await db.insert(
-          'devices',
-          device.toMap(),
-          conflictAlgorithm: ConflictAlgorithm.replace,
+
+        final device = Device(
+          uuid: deviceMap['uuid'],
+          deviceName: deviceMap['deviceName'] ?? "Unknown",
+          endpointId: deviceMap['endpointId'] ?? '',
+          status: "Connected",
+          lastSeen: DateTime.now(),
+          isOnline: deviceMap['isOnline'] == 1,
         );
+
+        if (existing.isNotEmpty) {
+          await db.update(
+            'devices',
+            device.toMap(),
+            where: 'uuid = ?',
+            whereArgs: [device.uuid],
+          );
+        } else {
+          await db.insert(
+            'devices',
+            device.toMap(),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
       }
+
+      print("Saved ${devices.length} devices to database");
+
+      // Save cluster_members
+      for (final m in members) {
+        final memberMap = Map<String, dynamic>.from(m);
+
+        // Skip joiner's own membership
+        if (memberMap['deviceUuid'] == joinerUuid) continue;
+
+        await db.insert('cluster_members', {
+          'clusterId': memberMap['clusterId'],
+          'deviceUuid': memberMap['deviceUuid'],
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      }
+
+      print("Saved ${members.length} cluster members to database");
+
+      // Trigger state change notification for UI update
+      beacon.notifyListeners();
+    } catch (e) {
+      print("Error handling CLUSTER_INFO payload: $e");
     }
-
-    // Save cluster_members
-    for (final m in members) {
-      final memberMap = Map<String, dynamic>.from(m);
-
-      // skip joiner's own
-      if (memberMap['deviceUuid'] == joinerUuid) continue;
-
-      await db.insert('cluster_members', {
-        'clusterId': memberMap['clusterId'],
-        'deviceUuid': memberMap['deviceUuid'],
-      }, conflictAlgorithm: ConflictAlgorithm.ignore);
-    }
-    beacon.onClusterInfoSent?.call();
   }
 
   Future<String> _getDeviceUUID() async {

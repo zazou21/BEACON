@@ -3,9 +3,7 @@ import 'package:sqflite/sqflite.dart';
 import 'payload_strategy.dart';
 import 'nearby_connections.dart';
 
-
 class MarkOfflinePayloadStrategy implements PayloadStrategy {
-
   final NearbyConnectionsBase beacon;
 
   MarkOfflinePayloadStrategy(this.beacon);
@@ -50,8 +48,8 @@ class MarkOfflinePayloadStrategy implements PayloadStrategy {
 
       print("Device $deviceUuid marked as offline in database");
 
-      // Trigger status change callback
-      beacon.onStatusChange?.call();
+      // Trigger state change notification
+      beacon.notifyListeners();
     } catch (e) {
       print("Error handling MARK_OFFLINE payload: $e");
     }

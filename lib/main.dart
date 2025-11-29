@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import 'theme.dart';
 import 'screens/dashboard_page.dart';
+import 'viewmodels/dashboard_view_model.dart';
 import 'screens/chat_page.dart';
 import 'screens/resources_page.dart';
 import 'screens/profile_page.dart';
@@ -93,7 +95,29 @@ final GoRouter _router = GoRouter(
 
 // ---------------------------
 // Helper widget: ThemeToggleButton
+// ---------------------------
+class ThemeToggleButton extends StatelessWidget {
+  const ThemeToggleButton({super.key});
 
+  @override
+  Widget build(BuildContext context) {
+    // Find the BeaconApp state to toggle the theme
+    final appState = context.findAncestorStateOfType<_BeaconAppState>();
+    final isDark =
+        appState?.isDarkMode ?? Theme.of(context).brightness == Brightness.dark;
+
+    return IconButton(
+      tooltip: isDark ? 'Switch to light' : 'Switch to dark',
+      icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
+      onPressed: () {
+        if (appState != null) appState.toggleTheme();
+      },
+    );
+  }
+}
+
+// ---------------------------
+// DB Flush Button
 // ---------------------------
 class DbFlushButton extends StatelessWidget {
   final VoidCallback onFlush;
@@ -116,26 +140,7 @@ void onFlush() async {
   await db.delete('devices');
   await db.delete('clusters');
   await db.delete('cluster_members');
-}
-
-class ThemeToggleButton extends StatelessWidget {
-  const ThemeToggleButton({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    // Find the BeaconApp state to toggle the theme
-    final appState = context.findAncestorStateOfType<_BeaconAppState>();
-    final isDark =
-        appState?.isDarkMode ?? Theme.of(context).brightness == Brightness.dark;
-
-    return IconButton(
-      tooltip: isDark ? 'Switch to light' : 'Switch to dark',
-      icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
-      onPressed: () {
-        if (appState != null) appState.toggleTheme();
-      },
-    );
-  }
+  print('Database flushed successfully');
 }
 
 // ---------------------------
@@ -145,12 +150,12 @@ class LandingPage extends StatelessWidget {
   const LandingPage({super.key});
 
   void _startNew(BuildContext context) {
-    // Navigate to chat in "start" mode
+    // Navigate to dashboard in "initiator" mode
     context.go('/dashboard?mode=initiator');
   }
 
   void _joinExisting(BuildContext context) {
-    // Navigate to dashboard in "join" mode
+    // Navigate to dashboard in "joiner" mode
     context.go('/dashboard?mode=joiner');
   }
 
@@ -299,7 +304,7 @@ class LandingPage extends StatelessWidget {
 }
 
 // ---------------------------
-// HomeShell with Bottom Navigation (now with AppBar + Theme toggle)
+// HomeShell with Bottom Navigation
 // ---------------------------
 class HomeShell extends StatefulWidget {
   final Widget child;
@@ -315,7 +320,10 @@ class _HomeShellState extends State<HomeShell> {
     final saved = prefs.getString('dashboard_mode');
 
     if (saved == null) return null;
-    return DashboardMode.values.firstWhere((e) => e.name == saved);
+    return DashboardMode.values.firstWhere(
+      (e) => e.name == saved,
+      orElse: () => DashboardMode.joiner,
+    );
   }
 
   final Map<String, int> _locationToIndex = {
@@ -390,8 +398,8 @@ class _HomeShellState extends State<HomeShell> {
       appBar: AppBar(
         title: Text(title),
         actions: const [
-          ThemeToggleButton(), // shared toggle here so all inner pages show it
-          DbFlushButton(onFlush: onFlush), // DB flush button
+          ThemeToggleButton(),
+          DbFlushButton(onFlush: onFlush),
         ],
       ),
       body: widget.child,

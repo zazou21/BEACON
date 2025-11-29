@@ -3,13 +3,13 @@ part of 'nearby_connections.dart';
 class NearbyConnectionsInitiator extends NearbyConnectionsBase {
   final Map<String, PendingConnection> _pendingConnections = {};
   final Map<String, PendingInvite> _pendingInvites = {};
-  final List<String> availableDevices = [];
+  final List<Device> _availableDevices = [];
 
-  Cluster? createdCluster;
+  Cluster? _createdCluster;
 
-  void Function()? onDeviceFound;
-  void Function()? onDeviceLost;
-  void Function()? onClusterJoinedInitiatorSide;
+  // Getters for reactive state
+  Cluster? get createdCluster => _createdCluster;
+  List<Device> get availableDevices => List.unmodifiable(_availableDevices);
 
   @override
   Future<void> startCommunication() async {
@@ -25,6 +25,8 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
 
     if (existing.isNotEmpty) {
       print('[Nearby] existing cluster found for initiator');
+      _createdCluster = Cluster.fromMap(existing.first);
+      notifyListeners();
       return;
     }
 
@@ -35,7 +37,7 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
       ownerEndpointId: '',
       name: deviceName,
     );
-    createdCluster = cluster;
+    _createdCluster = cluster;
 
     try {
       await db.transaction((txn) async {
@@ -51,6 +53,7 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
       });
       await _startAdvertising(clusterId, cluster.name);
       await _startDiscovery();
+      notifyListeners();
     } catch (e) {
       print('[Nearby] DB error while creating cluster: $e');
     }
@@ -139,12 +142,13 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
       });
 
       _activeConnections[endpointId] = joinerUuid;
-      if (!connectedEndpoints.contains(endpointId)) {
-        connectedEndpoints.add(endpointId);
+      if (!_connectedEndpoints.contains(endpointId)) {
+        _connectedEndpoints.add(endpointId);
       }
 
       await _sendClusterInfo(clusterId);
-      onClusterJoinedInitiatorSide?.call();
+      await _loadAvailableDevices();
+      notifyListeners();
     } catch (e) {
       print('[Nearby] _onConnectionResult db error: $e');
     }
@@ -178,7 +182,7 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
     final devicesList = List<Map<String, dynamic>>.from(devicesInCluster);
     devicesList.add(selfDevice.toMap());
 
-    for (final epId in connectedEndpoints) {
+    for (final epId in _connectedEndpoints) {
       final pending = _activeConnections[epId];
       if (pending == null) continue;
 
@@ -214,7 +218,6 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
     final devUuid = parts[1];
     final name = parts[2];
 
-    //check if device already exists and its status
     final db = await DBService().database;
     final d = await db.query(
       "devices",
@@ -222,7 +225,7 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
       whereArgs: [devUuid],
       limit: 1,
     );
-    // if device is found update its endpoint id and set in_range true
+
     if (d.isNotEmpty) {
       await db.update(
         "devices",
@@ -234,10 +237,7 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
         where: "uuid = ?",
         whereArgs: [devUuid],
       );
-
-      onDeviceFound?.call();
     } else {
-      // if device not found insert it with in_range true
       final device = Device(
         uuid: devUuid,
         deviceName: name,
@@ -251,38 +251,62 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
         device.toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-      onDeviceFound?.call();
     }
+
+    await _loadAvailableDevices();
+    notifyListeners();
   }
 
-  void _onEndpointLost(String? endpointId) {
-    // get the device from the database using the endpointId
-    DBService().database.then((db) async {
-      final d = await db.query(
+  Future<void> _loadAvailableDevices() async {
+    if (_createdCluster == null) return;
+
+    final db = await DBService().database;
+    final results = await db.query(
+      "devices",
+      where: "inRange = ? AND uuid != ?",
+      whereArgs: [1, uuid],
+    );
+
+    final clusterMembers = await db.query(
+      "cluster_members",
+      where: "clusterId = ?",
+      whereArgs: [_createdCluster!.clusterId],
+    );
+
+    _availableDevices.clear();
+    _availableDevices.addAll(
+      results
+          .map((map) => Device.fromMap(map))
+          .where((d) => !clusterMembers.any((cm) => cm['deviceUuid'] == d.uuid))
+          .toList(),
+    );
+  }
+
+  void _onEndpointLost(String? endpointId) async {
+    final db = await DBService().database;
+    final d = await db.query(
+      "devices",
+      where: "endpointId = ?",
+      whereArgs: [endpointId],
+      limit: 1,
+    );
+    if (d.isNotEmpty) {
+      await db.update(
         "devices",
+        {"inRange": 0, "lastSeen": DateTime.now().toIso8601String()},
         where: "endpointId = ?",
         whereArgs: [endpointId],
-        limit: 1,
       );
-      if (d.isNotEmpty) {
-        final device = Device.fromMap(d.first);
-        // update the device in_range to false
-        await db.update(
-          "devices",
-          {"inRange": 0, "lastSeen": DateTime.now().toIso8601String()},
-          where: "endpointId = ?",
-          whereArgs: [endpointId],
-        );
-        onDeviceLost?.call();
-      }
-    });
+      await _loadAvailableDevices();
+      notifyListeners();
+    }
   }
 
   void _onDisconnected(String endpointId) async {
     print(endpointId + ' disconnected from initiator side');
 
     final devUuid = _activeConnections.remove(endpointId);
-    connectedEndpoints.remove(endpointId);
+    _connectedEndpoints.remove(endpointId);
     if (devUuid == null) return;
 
     try {
@@ -303,8 +327,8 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
         whereArgs: [devUuid],
       );
 
-      onClusterJoinedInitiatorSide?.call(); // to refresh cluster member list
-      onDeviceFound?.call(); // to refresh device list
+      await _loadAvailableDevices();
+      notifyListeners();
     } catch (e) {
       print('[Nearby] disconnect cleanup error: $e');
     }
@@ -382,12 +406,13 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
       });
 
       _activeConnections[endpointId] = joinerUuid;
-      if (!connectedEndpoints.contains(endpointId)) {
-        connectedEndpoints.add(endpointId);
+      if (!_connectedEndpoints.contains(endpointId)) {
+        _connectedEndpoints.add(endpointId);
       }
 
       await _sendClusterInfo(clusterId);
-      onClusterJoinedInitiatorSide?.call();
+      await _loadAvailableDevices();
+      notifyListeners();
     } catch (e) {
       print('[Nearby] _onInviteConnectionResult db error: $e');
     }
@@ -395,7 +420,7 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
 
   void _onInviteDisconnected(String endpointId) async {
     final devUuid = _activeConnections.remove(endpointId);
-    connectedEndpoints.remove(endpointId);
+    _connectedEndpoints.remove(endpointId);
     print(endpointId + ' disconnected from invite side');
     if (devUuid == null) return;
     print('[Nearby] cleaning up after disconnect for $devUuid');
@@ -411,14 +436,13 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
         where: "uuid = ?",
         whereArgs: [devUuid],
       );
-      //remove from cluster members
       await db.delete(
         "cluster_members",
         where: "deviceUuid = ?",
         whereArgs: [devUuid],
       );
-      onClusterJoinedInitiatorSide?.call();
-      onDeviceFound?.call();
+      await _loadAvailableDevices();
+      notifyListeners();
     } catch (e) {
       print('[Nearby] disconnect cleanup error: $e');
     }

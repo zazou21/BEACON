@@ -3,6 +3,7 @@ import 'cluster_info_payload_strategy.dart';
 import 'mark_offline_payload_strategy.dart';
 import 'mark_online_payload_strategy.dart';
 import 'nearby_connections.dart';
+import 'resources_payload_strategy.dart';
 
 class PayloadStrategyFactory {
   // Store beacon instance for dependency injection
@@ -27,13 +28,15 @@ class PayloadStrategyFactory {
         return MarkOnlinePayloadStrategy(_beacon!);
       case "CLUSTER_INFO":
         return ClusterInfoPayloadStrategy(_beacon!);
+      case "RESOURCES":
+        return ResourcesPayloadStrategy();
       default:
         return UnknownPayloadStrategy();
+
     }
   }
 }
 
-// Fallback for unknown message types
 class UnknownPayloadStrategy implements PayloadStrategy {
   @override
   Future<void> handle(String endpointId, Map<String, dynamic> data) async {

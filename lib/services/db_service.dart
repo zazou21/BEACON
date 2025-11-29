@@ -67,6 +67,23 @@ class DBService {
           FOREIGN KEY(deviceUuid) REFERENCES devices(uuid)
         )
       """);
+
+
+      await db.execute("""
+        CREATE TABLE resources (
+          resourceId TEXT PRIMARY KEY,
+          resourceName TEXT,
+          resourceDescription TEXT,
+          resourceType TEXT,
+          resourceStatus TEXT,
+          userUuid TEXT,
+          createdAt INTEGER,
+        
+          FOREIGN KEY(userUuid) REFERENCES devices(uuid)
+          )
+       """ );
+
+    
       },
     );
   }

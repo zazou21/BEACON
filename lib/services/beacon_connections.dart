@@ -1,5 +1,4 @@
 import 'dart:typed_data';
-
 import 'package:nearby_connections/nearby_connections.dart';
 import 'package:beacon_project/models/device.dart';
 import 'package:beacon_project/services/db_service.dart';
@@ -7,7 +6,6 @@ import 'package:uuid/uuid.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
- 
 import 'package:device_info_plus/device_info_plus.dart';
 import 'dart:io';
 
@@ -50,8 +48,7 @@ class BeaconConnections {
 
 Future<bool> _requestNearbyPermissions() async {
   final List<Permission> permissions = [
-    Permission.locationWhenInUse,
-    Permission.bluetooth,
+    Permission.locationWhenInUse,     Permission.bluetooth,
   ];
 
   int sdkInt = 0;
@@ -204,6 +201,8 @@ Future<bool> _requestNearbyPermissions() async {
       connectedEndpoints.add(endpointId);
     }
   }
+
+  
 
   void _onDisconnected(String endpointId) {
     connectedEndpoints.remove(endpointId);

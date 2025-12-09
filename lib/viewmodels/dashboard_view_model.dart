@@ -5,11 +5,11 @@ import 'package:beacon_project/models/device.dart';
 import 'package:beacon_project/models/cluster.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum DashboardMode { initiator, joiner }
+import 'package:beacon_project/models/dashboard_mode.dart';
 
 class DashboardViewModel extends ChangeNotifier {
   final DashboardMode mode;
-  late final NearbyConnectionsBase beacon;
+  late final NearbyConnectionsBase nearby;
 
   // Initiator state
   Cluster? currentCluster;
@@ -17,27 +17,27 @@ class DashboardViewModel extends ChangeNotifier {
   List<Device> connectedDevices = [];
 
   // Joiner state
-  List<Map<String, String>> discoveredClusters = [];
   Cluster? joinedCluster;
+  List<Map<String, String>> discoveredClusters = [];
   List<Device> connectedDevicesToCluster = [];
 
   DashboardViewModel({required this.mode}) {
-    _initializeBeacon();
+    _dashboardSetup();
   }
 
-  void _initializeBeacon() {
+  void _dashboardSetup() {
     if (mode == DashboardMode.initiator) {
-      beacon = NearbyConnectionsInitiator();
-      beacon.addListener(_onBeaconStateChanged);
+      nearby = NearbyConnectionsInitiator();
+      nearby.addListener(_onNearbyStateChanged);
     } else {
-      beacon = NearbyConnectionsJoiner();
-      beacon.addListener(_onBeaconStateChanged);
+      nearby = NearbyConnectionsJoiner();
+      nearby.addListener(_onNearbyStateChanged);
     }
   }
 
-  Future<void> initialize() async {
-    await beacon.init();
-    await beacon.startCommunication();
+  Future<void> initializeNearby() async {
+    await nearby.init();
+    await nearby.startCommunication(); // start advertising and discovering
 
     if (mode == DashboardMode.joiner) {
       await _loadCurrentClusterJoiner();
@@ -50,7 +50,12 @@ class DashboardViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _onBeaconStateChanged() {
+  void onNearbyStateChanged() {
+    _onNearbyStateChanged();
+  }
+
+  // when notifyListeners is called from nearbyconnection service
+  void _onNearbyStateChanged() {
     if (mode == DashboardMode.initiator) {
       _handleInitiatorStateChange();
     } else {
@@ -59,7 +64,7 @@ class DashboardViewModel extends ChangeNotifier {
   }
 
   void _handleInitiatorStateChange() {
-    final initiator = beacon as NearbyConnectionsInitiator;
+    final initiator = nearby as NearbyConnectionsInitiator;
     currentCluster = initiator.createdCluster;
     availableDevices = initiator.availableDevices;
     _loadConnectedDevicesInitiator();
@@ -67,7 +72,7 @@ class DashboardViewModel extends ChangeNotifier {
   }
 
   void _handleJoinerStateChange() {
-    final joiner = beacon as NearbyConnectionsJoiner;
+    final joiner = nearby as NearbyConnectionsJoiner;
     joinedCluster = joiner.joinedCluster;
     discoveredClusters = joiner.discoveredClusters;
     _loadConnectedDevicesJoiner();
@@ -77,6 +82,8 @@ class DashboardViewModel extends ChangeNotifier {
   // INITIATOR METHODS
 
   Future<void> _loadCurrentClusterInitiator() async {
+    print("[DASHBOARD]: loading current cluster");
+    // find cluster owned by me
     final db = await DBService().database;
     final results = await db.query("clusters");
     final sp = await SharedPreferences.getInstance();
@@ -96,13 +103,14 @@ class DashboardViewModel extends ChangeNotifier {
   }
 
   Future<void> _loadConnectedDevicesInitiator() async {
+    print("[DASHBOARD]: loading connected devices");
     if (currentCluster == null) return;
 
     final db = await DBService().database;
     final members = await db.query(
       "cluster_members",
       where: "clusterId = ? AND deviceUuid != ?",
-      whereArgs: [currentCluster!.clusterId, beacon.uuid],
+      whereArgs: [currentCluster!.clusterId, nearby.uuid],
     );
 
     if (members.isEmpty) {
@@ -122,7 +130,8 @@ class DashboardViewModel extends ChangeNotifier {
   }
 
   Future<void> inviteToCluster(Device device) async {
-    final initiator = beacon as NearbyConnectionsInitiator;
+    print("[DASHBOARD]: inviting to cluster");
+    final initiator = nearby as NearbyConnectionsInitiator;
     await initiator.inviteToCluster(
       device.endpointId,
       currentCluster!.clusterId,
@@ -132,6 +141,9 @@ class DashboardViewModel extends ChangeNotifier {
   // JOINER METHODS
 
   Future<void> _loadCurrentClusterJoiner() async {
+    print("[DASHBOARD]: loading current cluster");
+
+    // find cluster where i am a member of
     final db = await DBService().database;
     final sp = await SharedPreferences.getInstance();
     final myUuid = sp.getString('device_uuid');
@@ -160,51 +172,44 @@ class DashboardViewModel extends ChangeNotifier {
   }
 
   Future<void> _loadConnectedDevicesJoiner() async {
+    print("[DASHBOARD]: loading connected devices");
+
     if (joinedCluster == null) {
       connectedDevicesToCluster = [];
       notifyListeners();
       return;
     }
 
-    connectedDevicesToCluster = await _fetchConnectedDevicesJoiner(
-      joinedCluster!.clusterId,
-      beacon.uuid,
+    final db = await DBService().database;
+    final rows = await db.rawQuery(
+      '''
+    SELECT d.*
+    FROM cluster_members cm
+    JOIN devices d ON d.uuid = cm.deviceUuid
+    WHERE cm.clusterId = ?
+      AND cm.deviceUuid != ?
+    ''',
+      [joinedCluster!.clusterId, nearby.uuid],
     );
+
+    connectedDevicesToCluster = rows.map((m) => Device.fromMap(m)).toList();
 
     notifyListeners();
   }
 
-  Future<List<Device>> _fetchConnectedDevicesJoiner(
-    String clusterId,
-    String excludeUuid,
-  ) async {
-    final db = await DBService().database;
-    final rows = await db.rawQuery(
-      '''
-      SELECT d.*
-      FROM cluster_members cm
-      JOIN devices d ON d.uuid = cm.deviceUuid
-      WHERE cm.clusterId = ?
-        AND cm.deviceUuid != ?
-      ''',
-      [clusterId, excludeUuid],
-    );
-
-    return rows.map((m) => Device.fromMap(m)).toList();
-  }
-
   Future<void> joinCluster(Map<String, String> clusterInfo) async {
-    final joiner = beacon as NearbyConnectionsJoiner;
+    print("[DASHBOARD]: joining cluster");
+    final joiner = nearby as NearbyConnectionsJoiner;
     await joiner.joinCluster(
       clusterInfo["endpointId"]!,
       clusterInfo["clusterId"]!,
       clusterInfo["clusterName"]!,
     );
-    
   }
 
   Future<void> acceptInvite(String endpointId) async {
-    final joiner = beacon as NearbyConnectionsJoiner;
+    print("[DASHBOARD]: accepting invite");
+    final joiner = nearby as NearbyConnectionsJoiner;
     await joiner.acceptInvite(endpointId);
 
     final db = await DBService().database;
@@ -217,12 +222,14 @@ class DashboardViewModel extends ChangeNotifier {
   }
 
   void rejectInvite() {
-    final joiner = beacon as NearbyConnectionsJoiner;
+    print("[DASHBOARD]: rejecting invite");
+    final joiner = nearby as NearbyConnectionsJoiner;
     joiner.rejectInvite();
   }
 
   Future<void> disconnectFromCluster() async {
-    final joiner = beacon as NearbyConnectionsJoiner;
+    print("[DASHBOARD]: disconnecting from cluster");
+    final joiner = nearby as NearbyConnectionsJoiner;
     await joiner.disconnectFromCluster();
     joinedCluster = null;
     connectedDevicesToCluster.clear();
@@ -232,14 +239,17 @@ class DashboardViewModel extends ChangeNotifier {
   // SHARED METHODS
 
   void markOffline() {
-    for (var endpointId in beacon.connectedEndpoints) {
-      beacon.sendMessage(endpointId, "MARK_OFFLINE", {"uuid": beacon.uuid});
+    print("[DASHBOARD]: marking offline");
+    for (var endpointId in nearby.connectedEndpoints) {
+      print("[DASHBOARD]: marking offline to $endpointId");
+      nearby.sendMessage(endpointId, "MARK_OFFLINE", {"uuid": nearby.uuid});
     }
   }
 
   void markOnline() {
-    for (var endpointId in beacon.connectedEndpoints) {
-      beacon.sendMessage(endpointId, "MARK_ONLINE", {"uuid": beacon.uuid});
+    print("[DASHBOARD]: marking online");
+    for (var endpointId in nearby.connectedEndpoints) {
+      nearby.sendMessage(endpointId, "MARK_ONLINE", {"uuid": nearby.uuid});
     }
   }
 
@@ -273,7 +283,8 @@ class DashboardViewModel extends ChangeNotifier {
   }
 
   Future<void> stopAll() async {
-    await beacon.stopAll();
+    print("[DASHBOARD]: stopping all");
+    await nearby.stopAll();
     currentCluster = null;
     availableDevices.clear();
     connectedDevices.clear();
@@ -299,7 +310,7 @@ class DashboardViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
-    beacon.removeListener(_onBeaconStateChanged);
+    nearby.removeListener(_onNearbyStateChanged);
     super.dispose();
   }
 }

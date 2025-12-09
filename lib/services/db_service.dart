@@ -22,29 +22,30 @@ class DBService {
       version: 1,
       onCreate: (db, version) async {
         await db.execute("""
-         CREATE TABLE devices (
-          uuid TEXT PRIMARY KEY,
-          deviceName TEXT,
-          endpointId TEXT,
-          status TEXT,
-
-          isOnline INTEGER DEFAULT 1,
-          inRange INTEGER DEFAULT 1,     -- TRUE
-          lastSeen INTEGER,
-          lastMessage TEXT,
-        )        
-      """);
+          CREATE TABLE devices (
+            uuid TEXT PRIMARY KEY,
+            deviceName TEXT,
+            endpointId TEXT,
+            status TEXT,
+            isOnline INTEGER DEFAULT 1,
+            inRange INTEGER DEFAULT 1,
+            lastSeen INTEGER,
+            lastMessage TEXT,
+            createdAt INTEGER,
+            updatedAt INTEGER
+          )
+          """);
 
         await db.execute("""
-        CREATE TABLE clusters (
-          clusterId TEXT PRIMARY KEY,
-          ownerUuid TEXT,
-          ownerEndpointId TEXT,
-          name TEXT,
-          createdAt INTEGER,
-          updatedAt INTEGER
-        )
-      """);
+          CREATE TABLE clusters (
+            clusterId TEXT PRIMARY KEY,
+            ownerUuid TEXT,
+            ownerEndpointId TEXT,
+            name TEXT,
+            createdAt INTEGER,
+            updatedAt INTEGER
+          )
+          """);
 
         await db.execute("""
         CREATE TABLE cluster_members (
@@ -71,6 +72,7 @@ class DBService {
           FOREIGN KEY(userUuid) REFERENCES devices(uuid)
           )
        """ );
+      
 
         await db.execute("""
         CREATE TABLE profile (
@@ -90,8 +92,6 @@ class DBService {
   }
   
 
-       
-  
 
   // ---------------- Profile Helpers ----------------
 
@@ -103,7 +103,12 @@ class DBService {
       return await db.insert('profile', profile.toMap());
     } else {
       // update the existing profile
-      return await db.update('profile', profile.toMap(), where: 'id = ?', whereArgs: [existing.first['id']]);
+      return await db.update(
+        'profile',
+        profile.toMap(),
+        where: 'id = ?',
+        whereArgs: [existing.first['id']],
+      );
     }
   }
 

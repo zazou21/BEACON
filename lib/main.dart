@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-<<<<<<< HEAD
-import 'package:provider/provider.dart';
 import 'theme.dart';
 import 'screens/dashboard_page.dart';
 import 'viewmodels/dashboard_view_model.dart';
@@ -10,9 +8,9 @@ import 'screens/resources_page.dart';
 import 'screens/profile_page.dart';
 import 'services/voice_commands.dart';
 import 'services/db_service.dart';
-import 'package:device_info_plus/device_info_plus.dart';
-import 'package:beacon_project/services/db_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:beacon_project/models/dashboard_mode.dart';
 
 void main() {
   runApp(const BeaconApp());
@@ -92,6 +90,12 @@ final GoRouter _router = GoRouter(
           name: 'profile',
           builder: (context, state) => const UserProfilePage(),
         ),
+        // route to landing
+        GoRoute(
+          path: '/',
+          name: ' ',
+          builder: (context, state) => const LandingPage(),
+        ),
       ],
     ),
   ],
@@ -131,24 +135,21 @@ class DbFlushButton extends StatelessWidget {
       icon: const Icon(Icons.delete_forever),
       onPressed: () {
         onFlush();
-        
       },
     );
   }
 }
 
-void onFlush() async{
-  final db=await DBService().database;
+void onFlush() async {
+  final db = await DBService().database;
   await db.delete('devices');
   await db.delete('clusters');
   await db.delete('cluster_members');
-
 }
 
 // ---------------------------
 // DB Flush Button
 // ---------------------------
-
 
 // ---------------------------
 // Landing Page
@@ -185,7 +186,7 @@ class LandingPage extends StatelessWidget {
         actions: const [
           // Theme toggle in Landing AppBar
           ThemeToggleButton(),
-          DbFlushButton(onFlush: onFlush)
+          DbFlushButton(onFlush: onFlush),
         ],
       ),
       body: SafeArea(
@@ -202,204 +203,6 @@ class LandingPage extends StatelessWidget {
             );
           },
         ),
-=======
-import 'package:shared_preferences/shared_preferences.dart';
-
-import 'theme.dart';
-import 'screens/dashboard_page.dart';
-import 'screens/chat_page.dart';
-import 'screens/resources_page.dart';
-import 'screens/profile_page.dart';
-import 'services/voice_commands.dart';
-import 'services/db_service.dart';
-
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  // Ensure DB is initialized early (optional)
-  await DBService().database;
-
-  final prefs = await SharedPreferences.getInstance();
-  final profileCompleted = prefs.getBool('profileCompleted') ?? false;
-
-  runApp(BeaconApp(profileCompleted: profileCompleted));
-}
-
-class BeaconApp extends StatefulWidget {
-  final bool profileCompleted;
-  const BeaconApp({super.key, required this.profileCompleted});
-
-  @override
-  State<BeaconApp> createState() => _BeaconAppState();
-}
-
-class _BeaconAppState extends State<BeaconApp> {
-  bool isDarkMode = false;
-
-  void toggleTheme() => setState(() => isDarkMode = !isDarkMode);
-
-  ThemeData get currentTheme => isDarkMode ? darkTheme() : lightTheme();
-
-  late final GoRouter _router;
-
-  @override
-  void initState() {
-    super.initState();
-    _router = GoRouter(
-      initialLocation: widget.profileCompleted ? '/dashboard' : '/profile',
-      routes: [
-        GoRoute(
-          path: '/',
-          name: 'landing',
-          builder: (context, state) => const LandingPage(),
-        ),
-
-        // ShellRoute for bottom navigation
-        ShellRoute(
-          builder: (context, state, child) {
-            return HomeShell(child: child);
-          },
-          routes: [
-            GoRoute(
-              path: '/dashboard',
-              name: 'dashboard',
-              builder: (context, state) {
-                final modeParam = state.uri.queryParameters['mode'] ?? 'browse';
-                late final DashboardMode mode;
-                if (modeParam == 'joiner') {
-                  mode = DashboardMode.joiner;
-                } else if (modeParam == 'initiator') {
-                  mode = DashboardMode.initiator;
-                } else {
-                  mode = DashboardMode.joiner;
-                }
-                return DashboardPage(mode: mode);
-              },
-            ),
-            GoRoute(
-              path: '/chat',
-              name: 'chat',
-              builder: (context, state) => const ChatPage(macAddress: ''),
-            ),
-            GoRoute(
-              path: '/resources',
-              name: 'resources',
-              builder: (context, state) => const ResourcePage(),
-            ),
-            GoRoute(
-              path: '/profile',
-              name: 'profile',
-              builder: (context, state) => const UserProfilePage(),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp.router(
-      title: 'BEACON',
-      theme: currentTheme,
-      routerConfig: _router,
-      debugShowCheckedModeBanner: false,
-    );
-  }
-}
-
-// ---------------------------
-// Theme toggle and DB flush (kept as before)
-// ---------------------------
-class ThemeToggleButton extends StatelessWidget {
-  const ThemeToggleButton({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final appState = context.findAncestorStateOfType<_BeaconAppState>();
-    final isDark =
-        appState?.isDarkMode ?? Theme.of(context).brightness == Brightness.dark;
-
-    return IconButton(
-      tooltip: isDark ? 'Switch to light' : 'Switch to dark',
-      icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
-      onPressed: () {
-        if (appState != null) appState.toggleTheme();
-      },
-    );
-  }
-}
-
-// DbFlushButton and onFlush preserved
-class DbFlushButton extends StatelessWidget {
-  final VoidCallback onFlush;
-  const DbFlushButton({super.key, required this.onFlush});
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: 'Flush Database',
-      icon: const Icon(Icons.delete_forever),
-      onPressed: () {
-        onFlush();
-      },
-    );
-  }
-}
-
-void onFlush() async {
-  final db = await DBService().database;
-  await db.delete('devices');
-  await db.delete('clusters');
-  await db.delete('cluster_members');
-  await db.delete('profile');
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.remove('profileCompleted');
-}
-
-// ---------------------------
-// Landing Page
-// ---------------------------
-class LandingPage extends StatelessWidget {
-  const LandingPage({super.key});
-
-  void _startNew(BuildContext context) {
-    // Navigate to chat in "start" mode
-    context.go('/dashboard?mode=initiator');
-  }
-
-  void _joinExisting(BuildContext context) {
-    // Navigate to dashboard in "join" mode
-    context.go('/dashboard?mode=joiner');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('BEACON'),
-        centerTitle: true,
-        actions: const [
-          // Theme toggle in Landing AppBar
-          ThemeToggleButton(),
-          DbFlushButton(onFlush: onFlush)
-        ],
-      ),
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final isWide = constraints.maxWidth > 600;
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: isWide
-                    ? _buildHorizontal(context)
-                    : _buildVertical(context),
-              ),
-            );
-          },
-        ),
->>>>>>> Korkor
       ),
     );
   }
@@ -508,11 +311,7 @@ class LandingPage extends StatelessWidget {
 }
 
 // ---------------------------
-<<<<<<< HEAD
 // HomeShell with Bottom Navigation
-=======
-// HomeShell with Bottom Navigation (now with AppBar + Theme toggle)
->>>>>>> Korkor
 // ---------------------------
 class HomeShell extends StatefulWidget {
   final Widget child;
@@ -523,7 +322,6 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
-<<<<<<< HEAD
   Future<DashboardMode?> getSavedDashboardMode() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString('dashboard_mode');
@@ -535,17 +333,12 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
-=======
->>>>>>> Korkor
   final Map<String, int> _locationToIndex = {
     '/dashboard': 0,
     '/chat': 1,
     '/resources': 2,
     '/profile': 3,
-<<<<<<< HEAD
     '/': 4,
-=======
->>>>>>> Korkor
   };
 
   final Map<int, String> _indexToTitle = {
@@ -553,33 +346,18 @@ class _HomeShellState extends State<HomeShell> {
     1: 'Chat',
     2: 'Resources',
     3: 'Profile',
-<<<<<<< HEAD
     4: 'Landing',
-=======
->>>>>>> Korkor
   };
 
   int _currentIndex = 0;
 
-<<<<<<< HEAD
   void _onTap(int index) async {
     final mode = await getSavedDashboardMode();
-    print('Navigating to index $index with mode ${mode?.name}');
     setState(() => _currentIndex = index);
+
     switch (index) {
       case 0:
-        if (mode != null) {
-          context.go('/dashboard?mode=${mode.name}');
-        } else {
-          context.go('/dashboard');
-        }
-=======
-  void _onTap(int index) {
-    setState(() => _currentIndex = index);
-    switch (index) {
-      case 0:
-        context.go('/dashboard');
->>>>>>> Korkor
+        context.go('/dashboard?mode=${mode?.name ?? 'joiner'}');
         break;
       case 1:
         context.go('/chat');
@@ -590,12 +368,9 @@ class _HomeShellState extends State<HomeShell> {
       case 3:
         context.go('/profile');
         break;
-<<<<<<< HEAD
-      case 3:
-        context.go('/');
+      case 4:
+        context.go('/'); 
         break;
-=======
->>>>>>> Korkor
     }
   }
 
@@ -619,11 +394,7 @@ class _HomeShellState extends State<HomeShell> {
       }
     }
   }
-<<<<<<< HEAD
-  
-=======
 
->>>>>>> Korkor
   @override
   Widget build(BuildContext context) {
     final loc = GoRouterState.of(context).uri.toString();
@@ -634,14 +405,22 @@ class _HomeShellState extends State<HomeShell> {
         title: Text(title),
         actions: const [
           ThemeToggleButton(),
-<<<<<<< HEAD
           DbFlushButton(onFlush: onFlush),
-=======
-          DbFlushButton(onFlush: onFlush) // shared toggle here so all inner pages show it
->>>>>>> Korkor
         ],
       ),
-      body: widget.child,
+      body: Stack(
+        children: [
+          // The actual page content
+          widget.child,
+
+          // Small voice button above the bottom navigation bar
+          Positioned(
+            right: 16,
+            bottom: kBottomNavigationBarHeight + 6,
+            child: const _VoiceToggleButton(),
+          ),
+        ],
+      ),
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
         currentIndex: _currentIndex,
@@ -657,12 +436,36 @@ class _HomeShellState extends State<HomeShell> {
             label: 'Resources',
           ),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-<<<<<<< HEAD
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Landing'),
-=======
->>>>>>> Korkor
         ],
       ),
+    );
+  }
+}
+
+class _VoiceToggleButton extends StatelessWidget {
+  const _VoiceToggleButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return FloatingActionButton.small(
+      heroTag: 'voice-toggle-fab',
+      onPressed: () {
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          builder: (ctx) {
+            return const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: VoiceCommandWidget(),
+            );
+          },
+        );
+      },
+      child: const Icon(Icons.mic),
     );
   }
 }

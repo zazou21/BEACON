@@ -4,6 +4,10 @@ import 'mark_offline_payload_strategy.dart';
 import 'mark_online_payload_strategy.dart';
 import 'nearby_connections.dart';
 import 'resources_payload_strategy.dart';
+import 'transfer_ownership_payload_strategy.dart';
+import 'owner_changed_payload_strategy.dart';
+import 'ownership_transferred_payload_strategy.dart';
+
 
 class PayloadStrategyFactory {
   // Store beacon instance for dependency injection
@@ -30,9 +34,17 @@ class PayloadStrategyFactory {
         return ClusterInfoPayloadStrategy(_beacon!);
       case "RESOURCES":
         return ResourcesPayloadStrategy();
+      case "TRANSFER_OWNERSHIP":
+        return TransferOwnershipPayloadStrategy(_beacon!);
+      case "OWNER_CHANGED":
+        return OwnerChangedPayloadStrategy(_beacon!);
+      case "OWNERSHIP_TRANSFERRED":
+        return OwnershipTransferredPayloadStrategy(_beacon!);
+
+      
+
       default:
         return UnknownPayloadStrategy();
-
     }
   }
 }

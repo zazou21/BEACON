@@ -216,13 +216,8 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.3.0"
-<<<<<<< HEAD
   nested:
     dependency: transitive
-=======
-  path:
-    dependency: "direct main"
->>>>>>> Korkor
     description:
       name: nested
       sha256: "03bac4c528c64c95c722ec99280375a6f2fc708eec17c7b3f07253b626cd2a20"
@@ -333,7 +328,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.8"
-<<<<<<< HEAD
   provider:
     dependency: "direct main"
     description:
@@ -342,8 +336,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.1.5+1"
-=======
->>>>>>> Korkor
   shared_preferences:
     dependency: "direct main"
     description:
@@ -356,10 +348,10 @@ packages:
     dependency: transitive
     description:
       name: shared_preferences_android
-      sha256: "46a46fd64659eff15f4638bbe19de43f9483f0e0bf024a9fb6b3582064bacc7b"
+      sha256: "83af5c682796c0f7719c2bbf74792d113e40ae97981b8f266fa84574573556bc"
       url: "https://pub.dev"
     source: hosted
-    version: "2.4.17"
+    version: "2.4.18"
   shared_preferences_foundation:
     dependency: transitive
     description:

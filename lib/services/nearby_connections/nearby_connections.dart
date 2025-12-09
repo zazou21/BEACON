@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:beacon_project/services/nearby_connections/payload_strategy_factory.dart';
+import 'package:beacon_project/models/chat_message.dart';
 
 part 'nearby_connection_initiator.dart';
 part 'nearby_connection_joiner.dart';
@@ -40,8 +41,8 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
   late String uuid;
 
   // Getters for reactive state
-  List<String> get connectedEndpoints => List.unmodifiable(_connectedEndpoints);
-  Map<String, String> get activeConnections => Map.unmodifiable(_activeConnections);
+  List<String> get connectedEndpoints => (_connectedEndpoints);
+  Map<String, String> get activeConnections => _activeConnections;
 
   Future<void> init() async {
     deviceName = await _getDeviceName();
@@ -93,6 +94,7 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
   }
 
   void onPayloadReceived(String endpointId, Payload payload) {
+    print("[Nearby]: payload received from $endpointId");
     try {
       if (payload.type == PayloadType.BYTES && payload.bytes != null) {
         final raw = String.fromCharCodes(payload.bytes!);
@@ -125,6 +127,7 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
     String type,
     Map<String, dynamic> data,
   ) async {
+    print("[Nearby]: sending message to $endpointId");
     final payload = {"type": type, "data": data};
     final jsonBytes = utf8.encode(jsonEncode(payload));
     try {
@@ -140,6 +143,7 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
   void onPayloadUpdate(String endpointId, PayloadTransferUpdate update) {}
 
   Future<void> stopAll() async {
+    print("[Nearby]: stopping all");
     try {
       await Nearby().stopAdvertising();
       await Nearby().stopDiscovery();

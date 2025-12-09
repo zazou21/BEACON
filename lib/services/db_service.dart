@@ -1,9 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
-<<<<<<< HEAD
-=======
 import '../models/profile_model.dart';
->>>>>>> Korkor
 
 class DBService {
   static final DBService _instance = DBService._internal();
@@ -18,10 +15,6 @@ class DBService {
     return _db!;
   }
 
-<<<<<<< HEAD
-
-=======
->>>>>>> Korkor
   Future<Database> _initDB() async {
     final path = join(await getDatabasesPath(), 'app.db');
     return await openDatabase(
@@ -29,49 +22,30 @@ class DBService {
       version: 1,
       onCreate: (db, version) async {
         await db.execute("""
-<<<<<<< HEAD
-         CREATE TABLE devices (
-=======
-        CREATE TABLE devices (
->>>>>>> Korkor
-          uuid TEXT PRIMARY KEY,
-          deviceName TEXT,
-          endpointId TEXT,
-          status TEXT,
-<<<<<<< HEAD
-          isOnline INTEGER DEFAULT 1,
-          inRange INTEGER DEFAULT 1,     -- TRUE
-=======
->>>>>>> Korkor
-          lastSeen INTEGER,
-          lastMessage TEXT,
-          createdAt INTEGER,
-          updatedAt INTEGER
-<<<<<<< HEAD
-        )        
-      """);
-=======
-        )
-        """);
->>>>>>> Korkor
+          CREATE TABLE devices (
+            uuid TEXT PRIMARY KEY,
+            deviceName TEXT,
+            endpointId TEXT,
+            status TEXT,
+            isOnline INTEGER DEFAULT 1,
+            inRange INTEGER DEFAULT 1,
+            lastSeen INTEGER,
+            lastMessage TEXT,
+            createdAt INTEGER,
+            updatedAt INTEGER
+          )
+          """);
 
         await db.execute("""
-        CREATE TABLE clusters (
-          clusterId TEXT PRIMARY KEY,
-          ownerUuid TEXT,
-<<<<<<< HEAD
-          ownerEndpointId TEXT,
-=======
->>>>>>> Korkor
-          name TEXT,
-          createdAt INTEGER,
-          updatedAt INTEGER
-        )
-<<<<<<< HEAD
-      """);
-=======
-        """);
->>>>>>> Korkor
+          CREATE TABLE clusters (
+            clusterId TEXT PRIMARY KEY,
+            ownerUuid TEXT,
+            ownerEndpointId TEXT,
+            name TEXT,
+            createdAt INTEGER,
+            updatedAt INTEGER
+          )
+          """);
 
         await db.execute("""
         CREATE TABLE cluster_members (
@@ -82,29 +56,6 @@ class DBService {
           FOREIGN KEY(clusterId) REFERENCES clusters(clusterId),
           FOREIGN KEY(deviceUuid) REFERENCES devices(uuid)
         )
-<<<<<<< HEAD
-      """);
-
-
-      await db.execute("""
-        CREATE TABLE resources (
-          resourceId TEXT PRIMARY KEY,
-          resourceName TEXT,
-          resourceDescription TEXT,
-          resourceType TEXT,
-          resourceStatus TEXT,
-          userUuid TEXT,
-          createdAt INTEGER,
-        
-          FOREIGN KEY(userUuid) REFERENCES devices(uuid)
-          )
-       """ );
-
-    
-      },
-    );
-  }
-=======
         """);
 
         await db.execute("""
@@ -119,6 +70,8 @@ class DBService {
           updatedAt INTEGER
         )
         """);
+
+    
       },
     );
   }
@@ -133,7 +86,12 @@ class DBService {
       return await db.insert('profile', profile.toMap());
     } else {
       // update the existing profile
-      return await db.update('profile', profile.toMap(), where: 'id = ?', whereArgs: [existing.first['id']]);
+      return await db.update(
+        'profile',
+        profile.toMap(),
+        where: 'id = ?',
+        whereArgs: [existing.first['id']],
+      );
     }
   }
 
@@ -160,7 +118,6 @@ class DBService {
     final db = await database;
     return await db.delete('profile');
   }
->>>>>>> Korkor
 }
 
 // how to use in other screens

@@ -71,7 +71,8 @@ class _VoiceCommandWidgetState extends State<VoiceCommandWidget> {
     if (command.contains("dashboard")) context.go("/dashboard");
     if (command.contains("resources")) context.go("/resources");
     if (command.contains("profile")) context.go("/profile");
-    if (command.contains("join communication")) context.go("/dashboard?mode=initiator");
+    if (command.contains("join communication"))
+      context.go("/dashboard?mode=initiator");
     if (command.contains("start communication")) {
       context.go("/dashboard?mode=joiner");
     }

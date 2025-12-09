@@ -1,6 +1,14 @@
 part of 'nearby_connections.dart';
 
 class NearbyConnectionsInitiator extends NearbyConnectionsBase {
+  static final NearbyConnectionsInitiator _instance =
+      NearbyConnectionsInitiator._internal();
+
+  factory NearbyConnectionsInitiator() {
+    return _instance;
+  }
+  NearbyConnectionsInitiator._internal();
+
   final Map<String, PendingConnection> _pendingConnections = {};
   final Map<String, PendingInvite> _pendingInvites = {};
   final List<Device> _availableDevices = [];
@@ -9,10 +17,13 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
 
   // Getters for reactive state
   Cluster? get createdCluster => _createdCluster;
-  List<Device> get availableDevices => List.unmodifiable(_availableDevices);
+  List<Device> get availableDevices => (_availableDevices);
 
   @override
+  @override
   Future<void> startCommunication() async {
+    print("[Nearby]: starting initiator");
+
     if (!await requestNearbyPermissions()) return;
 
     final db = await DBService().database;
@@ -26,10 +37,21 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
     if (existing.isNotEmpty) {
       print('[Nearby] existing cluster found for initiator');
       _createdCluster = Cluster.fromMap(existing.first);
+
+      // IMPORTANT: Always start advertising even if cluster exists
+      // This handles the case when transitioning from joiner to initiator
+      print('[Nearby] Starting advertising for existing cluster');
+      await _startAdvertising(
+        _createdCluster!.clusterId,
+        _createdCluster!.name,
+      );
+      await _startDiscovery();
+
       notifyListeners();
       return;
     }
 
+    // Create new cluster if none exists
     final clusterId = const Uuid().v4();
     final cluster = Cluster(
       clusterId: clusterId,
@@ -60,7 +82,10 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
   }
 
   Future<void> _startAdvertising(String clusterId, String clusterName) async {
+    print("[Nearby]: initiator advertising");
     final endpointName = "ac|$uuid|$clusterId|$clusterName";
+    print("[Nearby]: 📡 Advertising with name: $endpointName");
+
     try {
       await Nearby().startAdvertising(
         endpointName,
@@ -70,12 +95,14 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
         onConnectionResult: _onConnectionResult,
         onDisconnected: _onDisconnected,
       );
+      print("[Nearby]: ✅ Advertising started successfully as initiator");
     } catch (e) {
-      print('[Nearby] startAdvertising error: $e');
+      print('[Nearby] ❌ startAdvertising error: $e');
     }
   }
 
   Future<void> _startDiscovery() async {
+    print("[Nearby]: initiator discovering");
     try {
       await Nearby().startDiscovery(
         deviceName,
@@ -90,6 +117,7 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
   }
 
   void _onConnectionInitiated(String endpointId, ConnectionInfo info) async {
+    print('[Nearby] connection initiated from $endpointId');
     try {
       final parts = info.endpointName.split('|');
       if (parts.length < 2) return;
@@ -114,6 +142,8 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
   }
 
   void _onConnectionResult(String endpointId, Status status) async {
+    print("[Nearby] connection result from $endpointId");
+
     if (status != Status.CONNECTED) {
       _pendingConnections.remove(endpointId);
       return;
@@ -198,7 +228,7 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
       sendMessage(epId, "CLUSTER_INFO", {
         "clusterId": clusterId,
         "senderUuid": uuid,
-        "devices": devicesList,
+        "owner_device": selfDevice.toMap(),
         "members": clusterMembers,
       });
     }
@@ -209,6 +239,8 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
     String endpointName,
     String serviceId,
   ) async {
+    print('[Nearby] endpoint found: $endpointName');
+
     final parts = endpointName.split('|');
     if (parts.length < 3) return;
 
@@ -226,6 +258,7 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
       limit: 1,
     );
 
+    // if device exists, update the endpointId and inRange
     if (d.isNotEmpty) {
       await db.update(
         "devices",
@@ -237,7 +270,9 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
         where: "uuid = ?",
         whereArgs: [devUuid],
       );
-    } else {
+    }
+    // else create a new device
+    else {
       final device = Device(
         uuid: devUuid,
         deviceName: name,
@@ -283,6 +318,7 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
   }
 
   void _onEndpointLost(String? endpointId) async {
+    print('[Nearby] endpoint lost: $endpointId');
     final db = await DBService().database;
     final d = await db.query(
       "devices",
@@ -303,7 +339,7 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
   }
 
   void _onDisconnected(String endpointId) async {
-    print(endpointId + ' disconnected from initiator side');
+    print('[Nearby] disconnected from $endpointId');
 
     final devUuid = _activeConnections.remove(endpointId);
     _connectedEndpoints.remove(endpointId);
@@ -335,6 +371,7 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
   }
 
   Future<void> inviteToCluster(String endpointId, String clusterId) async {
+    print('[Nearby] inviting $endpointId to cluster');
     final name = "$uuid|$clusterId";
     _pendingInvites[endpointId] = PendingInvite('', clusterId);
 
@@ -356,6 +393,7 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
     String endpointId,
     ConnectionInfo info,
   ) async {
+    print('[Nearby] invite connection initiated from $endpointId');
     try {
       final parts = info.endpointName.split('|');
       if (parts.isEmpty) return;
@@ -378,6 +416,8 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
   }
 
   void _onInviteConnectionResult(String endpointId, Status status) async {
+    print('[Nearby] invite connection result from $endpointId');
+
     if (status != Status.CONNECTED) {
       _pendingInvites.remove(endpointId);
       return;
@@ -419,6 +459,7 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
   }
 
   void _onInviteDisconnected(String endpointId) async {
+    print('[Nearby] invite disconnected from $endpointId');
     final devUuid = _activeConnections.remove(endpointId);
     _connectedEndpoints.remove(endpointId);
     print(endpointId + ' disconnected from invite side');
@@ -448,8 +489,60 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
     }
   }
 
+  Future<void> transferOwnershipBeforeDisconnect() async {
+    if (_createdCluster == null || _connectedEndpoints.isEmpty) return;
+
+    print('[Nearby] Transferring cluster ownership before disconnect');
+
+    // Select a random connected device to become new owner
+    final newOwnerEndpointId = _connectedEndpoints.first;
+    final newOwnerUuid = _activeConnections[newOwnerEndpointId];
+
+    if (newOwnerUuid == null) return;
+
+    final db = await DBService().database;
+
+    // Get all cluster members
+    final members = await db.query(
+      "cluster_members",
+      where: "clusterId = ?",
+      whereArgs: [_createdCluster!.clusterId],
+    );
+
+    // Get all devices in cluster
+    final devices = await db.query(
+      "devices",
+      where:
+          "uuid IN (SELECT deviceUuid FROM cluster_members WHERE clusterId = ?)",
+      whereArgs: [_createdCluster!.clusterId],
+    );
+
+    // Send ownership transfer message to new owner
+    sendMessage(newOwnerEndpointId, "TRANSFER_OWNERSHIP", {
+      "clusterId": _createdCluster!.clusterId,
+      "clusterName": _createdCluster!.name,
+      "newOwnerUuid": newOwnerUuid,
+      "oldOwnerUuid": uuid,
+      "members": members,
+      "devices": devices,
+    });
+
+    for (final epId in _connectedEndpoints) {
+      if (epId != newOwnerEndpointId) {
+        sendMessage(epId, "OWNER_CHANGED", {
+          "clusterId": _createdCluster!.clusterId,
+          "newOwnerUuid": newOwnerUuid,
+          "oldOwnerUuid": uuid,
+        });
+      }
+    }
+
+    await Future.delayed(const Duration(milliseconds: 500));
+  }
+
   @override
   Future<void> stopAdvertising() async {
+    print('[Nearby]: stopping advertising');
     try {
       await Nearby().stopAdvertising();
     } catch (e) {
@@ -459,10 +552,44 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
 
   @override
   Future<void> stopDiscovery() async {
+    print('[Nearby]: stopping discovery');
     try {
       await Nearby().stopDiscovery();
     } catch (e) {
       print('[Nearby] stopDiscovery error: $e');
     }
+  }
+
+  @override
+  Future<void> stopAll() async {
+    print("[Nearby]: stopping all for initiator");
+
+    // Transfer ownership before stopping
+    await transferOwnershipBeforeDisconnect();
+
+    await stopAdvertising();
+    await stopDiscovery();
+
+    for (var endpointId in _connectedEndpoints) {
+      await Nearby().disconnectFromEndpoint(endpointId);
+    }
+
+    //remove self from cluster members
+    final db = await DBService().database;
+    await db.delete(
+      "cluster_members",
+      where: "deviceUuid = ?",
+      whereArgs: [uuid],
+    );
+    await db.delete("clusters", where: "ownerUuid = ?", whereArgs: [uuid]);
+
+    _connectedEndpoints.clear();
+    _activeConnections.clear();
+    _createdCluster = null;
+    _availableDevices.clear();
+    _pendingConnections.clear();
+    _pendingInvites.clear();
+
+    notifyListeners();
   }
 }

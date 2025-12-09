@@ -12,7 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:beacon_project/services/nearby_connections/payload_strategy_factory.dart';
-import 'package:beacon_project/models/chat_message.dart';
+
 
 part 'nearby_connection_initiator.dart';
 part 'nearby_connection_joiner.dart';

@@ -9,8 +9,8 @@ import 'screens/profile_page.dart';
 import 'services/voice_commands.dart';
 import 'services/db_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:beacon_project/models/dashboard_mode.dart';
+import 'package:beacon_project/services/nearby_connections/nearby_connections.dart';
 
 void main() {
   runApp(const BeaconApp());
@@ -23,8 +23,82 @@ class BeaconApp extends StatefulWidget {
   State<BeaconApp> createState() => _BeaconAppState();
 }
 
-class _BeaconAppState extends State<BeaconApp> {
+class _BeaconAppState extends State<BeaconApp> with WidgetsBindingObserver {
   bool isDarkMode = false;
+  NearbyConnectionsBase? _beacon;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      print('[App Lifecycle] App paused - marking offline');
+      _markOffline();
+    } else if (state == AppLifecycleState.resumed) {
+      print('[App Lifecycle] App resumed - marking online');
+      _markOnline();
+    }
+  }
+
+  void _markOffline() async {
+    if (mounted) {
+      try {
+        // Get the saved dashboard mode to determine which beacon instance to use
+        final prefs = await SharedPreferences.getInstance();
+        final modeStr = prefs.getString('dashboard_mode') ?? 'joiner';
+        final isInitiator = modeStr == 'initiator';
+        debugPrint('[_markOffline] Dashboard mode: $modeStr, isInitiator: $isInitiator');
+        
+        // Get the appropriate beacon singleton instance
+        final beacon = isInitiator 
+            ? NearbyConnectionsInitiator()
+            : NearbyConnectionsJoiner();
+        
+        print('[App Lifecycle] Marking offline for ${beacon.connectedEndpoints.length} endpoints');
+        for (var endpointId in beacon.connectedEndpoints) {
+          print('[App Lifecycle] Sending MARK_OFFLINE to $endpointId');
+          beacon.sendMessage(endpointId, "MARK_OFFLINE", {"uuid": beacon.uuid});
+        }
+      } catch (e) {
+        print('[App Lifecycle] Error marking offline: $e');
+      }
+    }
+  }
+
+  void _markOnline() async {
+    if (mounted) {
+      try {
+        // Get the saved dashboard mode to determine which beacon instance to use
+        final prefs = await SharedPreferences.getInstance();
+        final modeStr = prefs.getString('dashboard_mode') ?? 'joiner';
+        final isInitiator = modeStr == 'initiator';
+        debugPrint('[_markOnline] Dashboard mode: $modeStr, isInitiator: $isInitiator');
+        
+        // Get the appropriate beacon singleton instance
+        final beacon = isInitiator 
+            ? NearbyConnectionsInitiator() 
+            : NearbyConnectionsJoiner();
+        
+        print('[App Lifecycle] Marking online for ${beacon.connectedEndpoints.length} endpoints');
+        for (var endpointId in beacon.connectedEndpoints) {
+          print('[App Lifecycle] Sending MARK_ONLINE to $endpointId');
+          beacon.sendMessage(endpointId, "MARK_ONLINE", {"uuid": beacon.uuid});
+        }
+      } catch (e) {
+        print('[App Lifecycle] Error marking online: $e');
+      }
+    }
+  }
 
   void toggleTheme() => setState(() => isDarkMode = !isDarkMode);
 

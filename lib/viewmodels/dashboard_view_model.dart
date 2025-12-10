@@ -238,21 +238,6 @@ class DashboardViewModel extends ChangeNotifier {
 
   // SHARED METHODS
 
-  void markOffline() {
-    print("[DASHBOARD]: marking offline");
-    for (var endpointId in nearby.connectedEndpoints) {
-      print("[DASHBOARD]: marking offline to $endpointId");
-      nearby.sendMessage(endpointId, "MARK_OFFLINE", {"uuid": nearby.uuid});
-    }
-  }
-
-  void markOnline() {
-    print("[DASHBOARD]: marking online");
-    for (var endpointId in nearby.connectedEndpoints) {
-      nearby.sendMessage(endpointId, "MARK_ONLINE", {"uuid": nearby.uuid});
-    }
-  }
-
   Future<void> printDatabaseContents() async {
     final db = await DBService().database;
     final devices = await db.query("devices");

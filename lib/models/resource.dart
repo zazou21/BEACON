@@ -1,3 +1,5 @@
+import 'dart:async';
+
 enum ResourceStatus {
   requested,
   fulfilled,
@@ -19,6 +21,18 @@ class Resource {
   final ResourceType resourceType;
   final ResourceStatus resourceStatus;
   final String userUuid;
+
+  // Static stream for broadcasting resource changes
+  static final StreamController<List<Resource>> _resourceUpdateController =
+      StreamController<List<Resource>>.broadcast();
+
+  static Stream<List<Resource>> get resourceUpdateStream =>
+      _resourceUpdateController.stream;
+
+
+  static void notifyResourcesUpdated(List<Resource> resources) {
+    _resourceUpdateController.add(resources);
+  }
 
   Resource({
     required this.resourceId,

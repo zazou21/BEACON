@@ -25,8 +25,7 @@ class DashboardPage extends StatefulWidget {
   State<DashboardPage> createState() => _DashboardPageState();
 }
 
-class _DashboardPageState extends State<DashboardPage>
-    with WidgetsBindingObserver {
+class _DashboardPageState extends State<DashboardPage> {
   late DashboardViewModel _viewModel;
   StreamSubscription<DashboardMode>? _modeChangeSubscription;
   late DashboardMode _currentMode;
@@ -39,7 +38,6 @@ class _DashboardPageState extends State<DashboardPage>
     saveModeOnce(widget.mode);
     _viewModel = DashboardViewModel(mode: _currentMode);
     _viewModel.initializeNearby();
-    WidgetsBinding.instance.addObserver(this);
 
     // Listen for mode changes
     _modeChangeSubscription = ModeChangeNotifier().modeChangeStream.listen((
@@ -125,19 +123,9 @@ class _DashboardPageState extends State<DashboardPage>
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _modeChangeSubscription?.cancel();
     _viewModel.dispose();
     super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) {
-      _viewModel.markOffline();
-    } else if (state == AppLifecycleState.resumed) {
-      _viewModel.markOnline();
-    }
   }
 
   void _showInviteDialog() {

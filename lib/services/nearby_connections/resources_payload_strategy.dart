@@ -18,11 +18,11 @@ class ResourcesPayloadStrategy implements PayloadStrategy{
   @override
   Future<void> handle(String endpointId, Map<String, dynamic> data) async {
     final resources = data['resources'] as List<dynamic>?;
-    
 
     if (resources == null) return;
 
     final db = await DBService().database;
+    final List<Resource> savedResources = [];
 
     // Save resources
     for (final r in resources) {
@@ -34,10 +34,11 @@ class ResourcesPayloadStrategy implements PayloadStrategy{
         whereArgs: [resourceMap['resourceId']],
       );
 
-      final resource=Resource.fromMap(resourceMap);
+      final resource = Resource.fromMap(resourceMap);
+      savedResources.add(resource);
 
       debugPrint('Received resource: ${resource.resourceName}');
-      
+
       if (existing.isNotEmpty) {
         await db.update(
           'resources',
@@ -53,6 +54,14 @@ class ResourcesPayloadStrategy implements PayloadStrategy{
         );
       }
     }
+
+    // Notify all listeners that resources have been updated
+    // Fetch all resources from DB to ensure consistency
+    final allResourceMaps = await db.query('resources');
+    final allResources =
+        allResourceMaps.map((map) => Resource.fromMap(map)).toList();
+    
+    Resource.notifyResourcesUpdated(allResources);
   }
 
     

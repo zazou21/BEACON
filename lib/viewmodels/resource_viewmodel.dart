@@ -1,11 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqlite_api.dart';
+import 'dart:async';
 import '../models/resource.dart';
 import '../models/device.dart';
 import '../services/db_service.dart';
 import '../services/nearby_connections/nearby_connections.dart';
 import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 
 class ResourceViewModel extends ChangeNotifier {
   ResourceType selectedTab = ResourceType.foodWater;
@@ -17,6 +19,7 @@ class ResourceViewModel extends ChangeNotifier {
   final DBService dbService = DBService();
 
   late NearbyConnectionsBase beacon;
+  late StreamSubscription<List<Resource>> _resourceStreamSubscription;
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -28,9 +31,8 @@ class ResourceViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-          prefs = await SharedPreferences.getInstance();
+      prefs = await SharedPreferences.getInstance();
 
-    
       final modeStr = prefs.getString('dashboard_mode');
       final isInitiator = modeStr == 'initiator';
 
@@ -38,13 +40,20 @@ class ResourceViewModel extends ChangeNotifier {
           ? NearbyConnectionsInitiator()
           : NearbyConnectionsJoiner();
 
-    
       beacon.addListener(_onBeaconStateChanged);
 
       await beacon.init();
 
       // Initial load from DB
       await _reloadFromDb();
+
+      // Listen to resource updates from the model
+      _resourceStreamSubscription =
+          Resource.resourceUpdateStream.listen((updatedResources) {
+        print('[ResourceViewModel] Resources updated from stream');
+        resources = updatedResources;
+        notifyListeners();
+      });
     } catch (e) {
       debugPrint('Error initializing ResourceViewModel: $e');
     } finally {
@@ -54,7 +63,6 @@ class ResourceViewModel extends ChangeNotifier {
   }
 
   void _onBeaconStateChanged() async {
-   
     try {
       await _reloadFromDb();
       notifyListeners();
@@ -70,8 +78,9 @@ class ResourceViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
-    // Clean up listener like DashboardViewModel does
+    // Clean up listeners
     beacon.removeListener(_onBeaconStateChanged);
+    _resourceStreamSubscription.cancel();
     super.dispose();
   }
 

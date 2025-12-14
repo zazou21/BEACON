@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/resource.dart';
 import '../models/device.dart';
 import '../viewmodels/resource_viewmodel.dart';
+import '../repositories/resource_repository.dart';
 
 // Optional: control tab order explicitly
 const List<ResourceType> resourceTabOrder = [
@@ -44,12 +45,13 @@ String _timeAgo(DateTime dt) {
 }
 
 class ResourcePage extends StatelessWidget {
-  const ResourcePage({super.key});
+  const ResourcePage({super.key,this.viewModel});
+  final ResourceViewModel? viewModel;
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => ResourceViewModel()..init(),
+      create: (_) => viewModel ?? (ResourceViewModel()..init()),
       child: Consumer<ResourceViewModel>(
         builder: (context, viewModel, child) {
           return Scaffold(

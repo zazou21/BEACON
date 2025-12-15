@@ -1,3 +1,4 @@
+import 'package:beacon_project/services/text_to_speech.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -332,6 +333,7 @@ class _DashboardPageState extends State<DashboardPage> {
               onPressed: () => _viewModel.stopAll(),
               child: const Text("Stop All"),
             ),
+            TtsButton(dashboardViewModel: _viewModel),
           ],
         ),
         body: Consumer<DashboardViewModel>(

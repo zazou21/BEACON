@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:beacon_project/models/profile_model.dart';
+import 'package:uuid/uuid.dart';
 
 class DBService {
   static final DBService _instance = DBService._internal();
@@ -15,8 +16,12 @@ class DBService {
     return _db!;
   }
 
+ 
+
   Future<Database> _initDB() async {
     final path = join(await getDatabasesPath(), 'app.db');
+    
+
     return openDatabase(
       path,
       version: 1,

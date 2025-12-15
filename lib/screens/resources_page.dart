@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/resource.dart';
 import '../models/device.dart';
 import '../viewmodels/resource_viewmodel.dart';
-import '../repositories/resource_repository.dart';
+import 'package:beacon_project/services/text_to_speech.dart';
 
 // Optional: control tab order explicitly
 const List<ResourceType> resourceTabOrder = [
@@ -50,13 +50,16 @@ class ResourcePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+
     return ChangeNotifierProvider(
       create: (_) => viewModel ?? (ResourceViewModel()..init()),
       child: Consumer<ResourceViewModel>(
         builder: (context, viewModel, child) {
           return Scaffold(
             appBar: AppBar(
-              title: const Text('Share or request emergency resources'),
+              actions: [
+                TtsButton(resourceViewModel: viewModel),
+              ],
             ),
             body: Column(
               children: [

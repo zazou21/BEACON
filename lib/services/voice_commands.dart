@@ -5,8 +5,9 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 class VoiceCommandWidget extends StatefulWidget {
   final VoidCallback? toggleTheme;
+  final bool? buttonMode;
 
-  const VoiceCommandWidget({super.key, this.toggleTheme});
+  const VoiceCommandWidget({super.key, this.toggleTheme, this.buttonMode});
 
   @override
   State<VoiceCommandWidget> createState() => _VoiceCommandWidgetState();
@@ -85,6 +86,7 @@ class _VoiceCommandWidgetState extends State<VoiceCommandWidget> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.buttonMode == true) {
     return Column(
       children: [
         Text(
@@ -103,4 +105,19 @@ class _VoiceCommandWidgetState extends State<VoiceCommandWidget> {
       ],
     );
   }
+
+  else{
+    return FloatingActionButton(
+      onPressed: _isListening ? _stopListening : _startListening,
+      backgroundColor: _isListening ? Colors.red : Colors.blue,
+      child: Icon(_isListening ? Icons.mic : Icons.mic_none),
+    );
+
+  }
+}
+
+
+
+
+
 }

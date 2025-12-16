@@ -24,7 +24,6 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
     print("[Nearby]: starting initiator");
     if (!await requestNearbyPermissions()) return;
 
-<<<<<<< HEAD
     // Ensure repositories are initialized
     if (clusterRepository == null || 
         clusterMemberRepository == null || 
@@ -36,9 +35,6 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
     }
 
     final existingCluster = await clusterRepository!.getClusterByOwnerUuid(uuid!);
-=======
-    final existingCluster = await clusterRepository!.getClusterByOwnerUuid(uuid);
->>>>>>> karim
 
     if (existingCluster != null) {
       print('[Nearby] existing cluster found for initiator');
@@ -67,11 +63,7 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
     try {
       await clusterRepository!.insertCluster(cluster);
       await clusterMemberRepository!.insertMember(
-<<<<<<< HEAD
         ClusterMember(clusterId: clusterId, deviceUuid: uuid!),
-=======
-        ClusterMember(clusterId: clusterId, deviceUuid: uuid),
->>>>>>> karim
       );
 
       await _startAdvertising(clusterId, cluster.name);
@@ -196,7 +188,6 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
   Future<void> _sendClusterInfo(String clusterId) async {
     print("[Nearby] Sending CLUSTER_INFO for clusterId: $clusterId");
 
-<<<<<<< HEAD
     // Ensure repositories and device info are initialized
     if (clusterMemberRepository == null || 
         deviceRepository == null || 
@@ -206,8 +197,6 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
       return;
     }
 
-=======
->>>>>>> karim
     final members = await clusterMemberRepository!.getMembersByClusterId(
       clusterId,
     );
@@ -264,15 +253,12 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
     final devUuid = parts[1];
     final name = parts[2];
 
-<<<<<<< HEAD
     // Ensure deviceRepository is initialized
     if (deviceRepository == null) {
       print('[Nearby] Error: deviceRepository not initialized in _onEndpointFound');
       return;
     }
 
-=======
->>>>>>> karim
     final existingDevice = await deviceRepository!.getDeviceByUuid(devUuid);
 
     if (existingDevice != null) {
@@ -302,15 +288,12 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
   Future<void> _loadAvailableDevices() async {
     if (_createdCluster == null) return;
 
-<<<<<<< HEAD
     // Ensure deviceRepository and uuid are initialized
     if (deviceRepository == null || uuid == null) {
       print('[Nearby] Error: deviceRepository or uuid not initialized in _loadAvailableDevices');
       return;
     }
 
-=======
->>>>>>> karim
     final devicesNotInCluster = await deviceRepository!.getDevicesNotInCluster(
       _createdCluster!.clusterId,
       uuid!,
@@ -553,7 +536,6 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
       await Nearby().disconnectFromEndpoint(endpointId);
     }
 
-<<<<<<< HEAD
     // Ensure repositories and uuid are initialized before cleanup
     if (clusterMemberRepository != null && uuid != null) {
       await clusterMemberRepository!.deleteAllMembersByDevice(uuid!);
@@ -561,10 +543,6 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
     if (clusterRepository != null && uuid != null) {
       await clusterRepository!.deleteClusterByOwner(uuid!);
     }
-=======
-    await clusterMemberRepository!.deleteAllMembersByDevice(uuid);
-    await clusterRepository!.deleteClusterByOwner(uuid);
->>>>>>> karim
 
     _connectedEndpoints.clear();
     _activeConnections.clear();

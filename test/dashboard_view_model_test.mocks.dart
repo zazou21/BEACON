@@ -3,19 +3,18 @@
 // Do not manually edit this file.
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
-import 'dart:async' as _i8;
-import 'dart:ui' as _i10;
+import 'dart:async' as _i7;
+import 'dart:ui' as _i9;
 
 import 'package:beacon_project/models/device.dart' as _i3;
 import 'package:beacon_project/repositories/cluster_member_repository.dart'
-    as _i7;
-import 'package:beacon_project/repositories/cluster_repository.dart' as _i6;
-import 'package:beacon_project/repositories/device_repository.dart' as _i5;
+    as _i6;
+import 'package:beacon_project/repositories/cluster_repository.dart' as _i5;
+import 'package:beacon_project/repositories/device_repository.dart' as _i4;
 import 'package:beacon_project/services/nearby_connections/nearby_connections.dart'
     as _i2;
 import 'package:mockito/mockito.dart' as _i1;
-import 'package:mockito/src/dummies.dart' as _i4;
-import 'package:nearby_connections/nearby_connections.dart' as _i9;
+import 'package:nearby_connections/nearby_connections.dart' as _i8;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -50,25 +49,6 @@ class MockNearbyConnectionsInitiator extends _i1.Mock
           as List<_i3.Device>);
 
   @override
-  String get deviceName =>
-      (super.noSuchMethod(
-            Invocation.getter(#deviceName),
-            returnValue: _i4.dummyValue<String>(
-              this,
-              Invocation.getter(#deviceName),
-            ),
-          )
-          as String);
-
-  @override
-  String get uuid =>
-      (super.noSuchMethod(
-            Invocation.getter(#uuid),
-            returnValue: _i4.dummyValue<String>(this, Invocation.getter(#uuid)),
-          )
-          as String);
-
-  @override
   List<String> get connectedEndpoints =>
       (super.noSuchMethod(
             Invocation.getter(#connectedEndpoints),
@@ -85,23 +65,29 @@ class MockNearbyConnectionsInitiator extends _i1.Mock
           as Map<String, String>);
 
   @override
-  set deviceRepository(_i5.DeviceRepository? value) => super.noSuchMethod(
+  set deviceRepository(_i4.DeviceRepository? value) => super.noSuchMethod(
     Invocation.setter(#deviceRepository, value),
     returnValueForMissingStub: null,
   );
 
   @override
-  set clusterRepository(_i6.ClusterRepository? value) => super.noSuchMethod(
+  set clusterRepository(_i5.ClusterRepository? value) => super.noSuchMethod(
     Invocation.setter(#clusterRepository, value),
     returnValueForMissingStub: null,
   );
 
   @override
-  set clusterMemberRepository(_i7.ClusterMemberRepository? value) =>
+  set clusterMemberRepository(_i6.ClusterMemberRepository? value) =>
       super.noSuchMethod(
         Invocation.setter(#clusterMemberRepository, value),
         returnValueForMissingStub: null,
       );
+
+  @override
+  set karim(dynamic value) => super.noSuchMethod(
+    Invocation.setter(#karim, value),
+    returnValueForMissingStub: null,
+  );
 
   @override
   set deviceName(String? value) => super.noSuchMethod(
@@ -121,119 +107,99 @@ class MockNearbyConnectionsInitiator extends _i1.Mock
           as bool);
 
   @override
-  _i8.Future<void> startCommunication() =>
+  _i7.Future<void> startCommunication() =>
       (super.noSuchMethod(
             Invocation.method(#startCommunication, []),
-            returnValue: _i8.Future<void>.value(),
-            returnValueForMissingStub: _i8.Future<void>.value(),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
           )
-          as _i8.Future<void>);
+          as _i7.Future<void>);
 
   @override
-  _i8.Future<void> inviteToCluster(String? endpointId, String? clusterId) =>
+  _i7.Future<void> inviteToCluster(String? endpointId, String? clusterId) =>
       (super.noSuchMethod(
             Invocation.method(#inviteToCluster, [endpointId, clusterId]),
-            returnValue: _i8.Future<void>.value(),
-            returnValueForMissingStub: _i8.Future<void>.value(),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
           )
-          as _i8.Future<void>);
+          as _i7.Future<void>);
 
   @override
-  _i8.Future<void> transferOwnershipBeforeDisconnect() =>
+  _i7.Future<void> transferOwnershipBeforeDisconnect() =>
       (super.noSuchMethod(
             Invocation.method(#transferOwnershipBeforeDisconnect, []),
-            returnValue: _i8.Future<void>.value(),
-            returnValueForMissingStub: _i8.Future<void>.value(),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
           )
-          as _i8.Future<void>);
+          as _i7.Future<void>);
 
   @override
-  _i8.Future<void> stopAdvertising() =>
+  _i7.Future<void> stopAdvertising() =>
       (super.noSuchMethod(
             Invocation.method(#stopAdvertising, []),
-            returnValue: _i8.Future<void>.value(),
-            returnValueForMissingStub: _i8.Future<void>.value(),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
           )
-          as _i8.Future<void>);
+          as _i7.Future<void>);
 
   @override
-  _i8.Future<void> stopDiscovery() =>
+  _i7.Future<void> stopDiscovery() =>
       (super.noSuchMethod(
             Invocation.method(#stopDiscovery, []),
-            returnValue: _i8.Future<void>.value(),
-            returnValueForMissingStub: _i8.Future<void>.value(),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
           )
-          as _i8.Future<void>);
+          as _i7.Future<void>);
 
   @override
-  _i8.Future<void> stopAll() =>
+  _i7.Future<void> stopAll() =>
       (super.noSuchMethod(
             Invocation.method(#stopAll, []),
-            returnValue: _i8.Future<void>.value(),
-            returnValueForMissingStub: _i8.Future<void>.value(),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
           )
-          as _i8.Future<void>);
+          as _i7.Future<void>);
 
   @override
-  _i8.Future<void> init(
-    _i5.DeviceRepository? deviceRepo,
-    _i6.ClusterRepository? clusterRepo,
-    _i7.ClusterMemberRepository? clusterMemberRepo,
-  ) =>
-      (super.noSuchMethod(
-            Invocation.method(#init, [
-              deviceRepo,
-              clusterRepo,
-              clusterMemberRepo,
-            ]),
-            returnValue: _i8.Future<void>.value(),
-            returnValueForMissingStub: _i8.Future<void>.value(),
-          )
-          as _i8.Future<void>);
+  dynamic init(
+    _i4.DeviceRepository? deviceRepo,
+    _i5.ClusterRepository? clusterRepo,
+    _i6.ClusterMemberRepository? clusterMemberRepo,
+  ) => super.noSuchMethod(
+    Invocation.method(#init, [deviceRepo, clusterRepo, clusterMemberRepo]),
+  );
 
   @override
-  _i8.Future<bool> requestNearbyPermissions() =>
-      (super.noSuchMethod(
-            Invocation.method(#requestNearbyPermissions, []),
-            returnValue: _i8.Future<bool>.value(false),
-          )
-          as _i8.Future<bool>);
-
-  @override
-  void onPayloadReceived(String? endpointId, _i9.Payload? payload) =>
+  void onPayloadReceived(String? endpointId, _i8.Payload? payload) =>
       super.noSuchMethod(
         Invocation.method(#onPayloadReceived, [endpointId, payload]),
         returnValueForMissingStub: null,
       );
 
   @override
-  _i8.Future<void> sendMessage(
+  dynamic sendMessage(
     String? endpointId,
     String? type,
     Map<String, dynamic>? data,
-  ) =>
-      (super.noSuchMethod(
-            Invocation.method(#sendMessage, [endpointId, type, data]),
-            returnValue: _i8.Future<void>.value(),
-            returnValueForMissingStub: _i8.Future<void>.value(),
-          )
-          as _i8.Future<void>);
+  ) => super.noSuchMethod(
+    Invocation.method(#sendMessage, [endpointId, type, data]),
+  );
 
   @override
-  void onPayloadUpdate(String? endpointId, _i9.PayloadTransferUpdate? update) =>
+  void onPayloadUpdate(String? endpointId, _i8.PayloadTransferUpdate? update) =>
       super.noSuchMethod(
         Invocation.method(#onPayloadUpdate, [endpointId, update]),
         returnValueForMissingStub: null,
       );
 
   @override
-  void addListener(_i10.VoidCallback? listener) => super.noSuchMethod(
+  void addListener(_i9.VoidCallback? listener) => super.noSuchMethod(
     Invocation.method(#addListener, [listener]),
     returnValueForMissingStub: null,
   );
 
   @override
-  void removeListener(_i10.VoidCallback? listener) => super.noSuchMethod(
+  void removeListener(_i9.VoidCallback? listener) => super.noSuchMethod(
     Invocation.method(#removeListener, [listener]),
     returnValueForMissingStub: null,
   );
@@ -269,25 +235,6 @@ class MockNearbyConnectionsJoiner extends _i1.Mock
           as List<Map<String, dynamic>>);
 
   @override
-  String get deviceName =>
-      (super.noSuchMethod(
-            Invocation.getter(#deviceName),
-            returnValue: _i4.dummyValue<String>(
-              this,
-              Invocation.getter(#deviceName),
-            ),
-          )
-          as String);
-
-  @override
-  String get uuid =>
-      (super.noSuchMethod(
-            Invocation.getter(#uuid),
-            returnValue: _i4.dummyValue<String>(this, Invocation.getter(#uuid)),
-          )
-          as String);
-
-  @override
   List<String> get connectedEndpoints =>
       (super.noSuchMethod(
             Invocation.getter(#connectedEndpoints),
@@ -304,23 +251,29 @@ class MockNearbyConnectionsJoiner extends _i1.Mock
           as Map<String, String>);
 
   @override
-  set deviceRepository(_i5.DeviceRepository? value) => super.noSuchMethod(
+  set deviceRepository(_i4.DeviceRepository? value) => super.noSuchMethod(
     Invocation.setter(#deviceRepository, value),
     returnValueForMissingStub: null,
   );
 
   @override
-  set clusterRepository(_i6.ClusterRepository? value) => super.noSuchMethod(
+  set clusterRepository(_i5.ClusterRepository? value) => super.noSuchMethod(
     Invocation.setter(#clusterRepository, value),
     returnValueForMissingStub: null,
   );
 
   @override
-  set clusterMemberRepository(_i7.ClusterMemberRepository? value) =>
+  set clusterMemberRepository(_i6.ClusterMemberRepository? value) =>
       super.noSuchMethod(
         Invocation.setter(#clusterMemberRepository, value),
         returnValueForMissingStub: null,
       );
+
+  @override
+  set karim(dynamic value) => super.noSuchMethod(
+    Invocation.setter(#karim, value),
+    returnValueForMissingStub: null,
+  );
 
   @override
   set deviceName(String? value) => super.noSuchMethod(
@@ -340,22 +293,22 @@ class MockNearbyConnectionsJoiner extends _i1.Mock
           as bool);
 
   @override
-  _i8.Future<void> startCommunication() =>
+  _i7.Future<void> startCommunication() =>
       (super.noSuchMethod(
             Invocation.method(#startCommunication, []),
-            returnValue: _i8.Future<void>.value(),
-            returnValueForMissingStub: _i8.Future<void>.value(),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
           )
-          as _i8.Future<void>);
+          as _i7.Future<void>);
 
   @override
-  _i8.Future<void> acceptInvite(String? endpointId) =>
+  _i7.Future<void> acceptInvite(String? endpointId) =>
       (super.noSuchMethod(
             Invocation.method(#acceptInvite, [endpointId]),
-            returnValue: _i8.Future<void>.value(),
-            returnValueForMissingStub: _i8.Future<void>.value(),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
           )
-          as _i8.Future<void>);
+          as _i7.Future<void>);
 
   @override
   void rejectInvite() => super.noSuchMethod(
@@ -364,7 +317,7 @@ class MockNearbyConnectionsJoiner extends _i1.Mock
   );
 
   @override
-  _i8.Future<void> joinCluster(
+  _i7.Future<void> joinCluster(
     String? endpointId,
     String? clusterId,
     String? clusterName,
@@ -375,107 +328,87 @@ class MockNearbyConnectionsJoiner extends _i1.Mock
               clusterId,
               clusterName,
             ]),
-            returnValue: _i8.Future<void>.value(),
-            returnValueForMissingStub: _i8.Future<void>.value(),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
           )
-          as _i8.Future<void>);
+          as _i7.Future<void>);
 
   @override
-  _i8.Future<void> disconnectFromCluster() =>
+  _i7.Future<void> disconnectFromCluster() =>
       (super.noSuchMethod(
             Invocation.method(#disconnectFromCluster, []),
-            returnValue: _i8.Future<void>.value(),
-            returnValueForMissingStub: _i8.Future<void>.value(),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
           )
-          as _i8.Future<void>);
+          as _i7.Future<void>);
 
   @override
-  _i8.Future<void> stopAdvertising() =>
+  _i7.Future<void> stopAdvertising() =>
       (super.noSuchMethod(
             Invocation.method(#stopAdvertising, []),
-            returnValue: _i8.Future<void>.value(),
-            returnValueForMissingStub: _i8.Future<void>.value(),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
           )
-          as _i8.Future<void>);
+          as _i7.Future<void>);
 
   @override
-  _i8.Future<void> stopDiscovery() =>
+  _i7.Future<void> stopDiscovery() =>
       (super.noSuchMethod(
             Invocation.method(#stopDiscovery, []),
-            returnValue: _i8.Future<void>.value(),
-            returnValueForMissingStub: _i8.Future<void>.value(),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
           )
-          as _i8.Future<void>);
+          as _i7.Future<void>);
 
   @override
-  _i8.Future<void> stopAll() =>
+  _i7.Future<void> stopAll() =>
       (super.noSuchMethod(
             Invocation.method(#stopAll, []),
-            returnValue: _i8.Future<void>.value(),
-            returnValueForMissingStub: _i8.Future<void>.value(),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
           )
-          as _i8.Future<void>);
+          as _i7.Future<void>);
 
   @override
-  _i8.Future<void> init(
-    _i5.DeviceRepository? deviceRepo,
-    _i6.ClusterRepository? clusterRepo,
-    _i7.ClusterMemberRepository? clusterMemberRepo,
-  ) =>
-      (super.noSuchMethod(
-            Invocation.method(#init, [
-              deviceRepo,
-              clusterRepo,
-              clusterMemberRepo,
-            ]),
-            returnValue: _i8.Future<void>.value(),
-            returnValueForMissingStub: _i8.Future<void>.value(),
-          )
-          as _i8.Future<void>);
+  dynamic init(
+    _i4.DeviceRepository? deviceRepo,
+    _i5.ClusterRepository? clusterRepo,
+    _i6.ClusterMemberRepository? clusterMemberRepo,
+  ) => super.noSuchMethod(
+    Invocation.method(#init, [deviceRepo, clusterRepo, clusterMemberRepo]),
+  );
 
   @override
-  _i8.Future<bool> requestNearbyPermissions() =>
-      (super.noSuchMethod(
-            Invocation.method(#requestNearbyPermissions, []),
-            returnValue: _i8.Future<bool>.value(false),
-          )
-          as _i8.Future<bool>);
-
-  @override
-  void onPayloadReceived(String? endpointId, _i9.Payload? payload) =>
+  void onPayloadReceived(String? endpointId, _i8.Payload? payload) =>
       super.noSuchMethod(
         Invocation.method(#onPayloadReceived, [endpointId, payload]),
         returnValueForMissingStub: null,
       );
 
   @override
-  _i8.Future<void> sendMessage(
+  dynamic sendMessage(
     String? endpointId,
     String? type,
     Map<String, dynamic>? data,
-  ) =>
-      (super.noSuchMethod(
-            Invocation.method(#sendMessage, [endpointId, type, data]),
-            returnValue: _i8.Future<void>.value(),
-            returnValueForMissingStub: _i8.Future<void>.value(),
-          )
-          as _i8.Future<void>);
+  ) => super.noSuchMethod(
+    Invocation.method(#sendMessage, [endpointId, type, data]),
+  );
 
   @override
-  void onPayloadUpdate(String? endpointId, _i9.PayloadTransferUpdate? update) =>
+  void onPayloadUpdate(String? endpointId, _i8.PayloadTransferUpdate? update) =>
       super.noSuchMethod(
         Invocation.method(#onPayloadUpdate, [endpointId, update]),
         returnValueForMissingStub: null,
       );
 
   @override
-  void addListener(_i10.VoidCallback? listener) => super.noSuchMethod(
+  void addListener(_i9.VoidCallback? listener) => super.noSuchMethod(
     Invocation.method(#addListener, [listener]),
     returnValueForMissingStub: null,
   );
 
   @override
-  void removeListener(_i10.VoidCallback? listener) => super.noSuchMethod(
+  void removeListener(_i9.VoidCallback? listener) => super.noSuchMethod(
     Invocation.method(#removeListener, [listener]),
     returnValueForMissingStub: null,
   );

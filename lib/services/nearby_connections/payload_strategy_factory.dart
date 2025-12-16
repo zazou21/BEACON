@@ -47,13 +47,16 @@ class PayloadStrategyFactory {
       case "MARK_ONLINE":
         return MarkOnlinePayloadStrategy(_beacon!, _deviceRepository!);
       case "CLUSTER_INFO":
-        return ClusterInfoPayloadStrategy(_beacon!);
+        return ClusterInfoPayloadStrategy(_beacon!, _deviceRepository!,
+            _clusterMemberRepository!);
       case "RESOURCES":
         return ResourcesPayloadStrategy();
       case "TRANSFER_OWNERSHIP":
-        return TransferOwnershipPayloadStrategy(_beacon!);
+        return TransferOwnershipPayloadStrategy(_beacon!, _deviceRepository!,
+            _clusterRepository!, _clusterMemberRepository!);
       case "OWNER_CHANGED":
-        return OwnerChangedPayloadStrategy(_beacon!);
+        return OwnerChangedPayloadStrategy(_beacon!, _deviceRepository!,
+            _clusterRepository!, _clusterMemberRepository!);
       case "OWNERSHIP_TRANSFERRED":
         return OwnershipTransferredPayloadStrategy(_beacon!);
 

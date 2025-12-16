@@ -112,6 +112,6 @@ class TransferOwnershipPayloadStrategy implements PayloadStrategy {
     // Trigger mode change to rebuild the UI
     ModeChangeNotifier().notifyModeChange(DashboardMode.initiator);
 
-    print('[Payload] ✅ Ownership transfer completed');
+    print('[Payload] Ownership transfer completed');
   }
 }

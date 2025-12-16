@@ -8,6 +8,9 @@ import '../services/nearby_connections/nearby_connections.dart';
 import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:beacon_project/repositories/device_repository_impl.dart';
+import 'package:beacon_project/repositories/cluster_repository_impl.dart';
+import 'package:beacon_project/repositories/cluster_member_repository_impl.dart';
 
 class ResourceViewModel extends ChangeNotifier {
   ResourceType selectedTab = ResourceType.foodWater;
@@ -42,14 +45,19 @@ class ResourceViewModel extends ChangeNotifier {
 
       beacon.addListener(_onBeaconStateChanged);
 
-      await beacon.init();
+      await beacon.init(
+        DeviceRepositoryImpl(dbService),
+        ClusterRepositoryImpl(dbService),
+        ClusterMemberRepositoryImpl(dbService),
+      );
 
       // Initial load from DB
       await _reloadFromDb();
 
       // Listen to resource updates from the model
-      _resourceStreamSubscription =
-          Resource.resourceUpdateStream.listen((updatedResources) {
+      _resourceStreamSubscription = Resource.resourceUpdateStream.listen((
+        updatedResources,
+      ) {
         print('[ResourceViewModel] Resources updated from stream');
         resources = updatedResources;
         notifyListeners();
@@ -124,8 +132,6 @@ class ResourceViewModel extends ChangeNotifier {
     return List.generate(maps.length, (i) => Device.fromMap(maps[i]));
   }
 
- 
-
   Future<void> postResource(String name, String description) async {
     try {
       _isLoading = true;
@@ -153,11 +159,9 @@ class ResourceViewModel extends ChangeNotifier {
       // Broadcast to others in cluster
       for (final device in connectedDevices) {
         if (device.uuid == userUuid) continue;
-        await beacon.sendMessage(
-          device.endpointId,
-          'RESOURCES',
-          {'resources': [newResource.toMap()]},
-        );
+        await beacon.sendMessage(device.endpointId, 'RESOURCES', {
+          'resources': [newResource.toMap()],
+        });
       }
 
       await _reloadFromDb();
@@ -195,11 +199,9 @@ class ResourceViewModel extends ChangeNotifier {
 
       for (final device in connectedDevices) {
         if (device.uuid == userUuid) continue;
-        await beacon.sendMessage(
-          device.endpointId,
-          'RESOURCES',
-          {'resources': [newResource.toMap()]},
-        );
+        await beacon.sendMessage(device.endpointId, 'RESOURCES', {
+          'resources': [newResource.toMap()],
+        });
       }
 
       await _reloadFromDb();

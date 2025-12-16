@@ -5,14 +5,15 @@ import 'package:flutter/foundation.dart';
 import 'package:nearby_connections/nearby_connections.dart';
 import 'package:beacon_project/models/device.dart';
 import 'package:beacon_project/models/cluster.dart';
-import 'package:beacon_project/services/db_service.dart';
-import 'package:sqflite/sqflite.dart';
+import 'package:beacon_project/models/cluster_member.dart';
 import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:beacon_project/services/nearby_connections/payload_strategy_factory.dart';
-
+import 'package:beacon_project/repositories/device_repository.dart';
+import 'package:beacon_project/repositories/cluster_repository.dart';
+import 'package:beacon_project/repositories/cluster_member_repository.dart';
 
 part 'nearby_connection_initiator.dart';
 part 'nearby_connection_joiner.dart';
@@ -32,11 +33,15 @@ class PendingInvite {
 abstract class NearbyConnectionsBase extends ChangeNotifier {
   static const STRATEGY = Strategy.P2P_CLUSTER;
   static const SERVICE_ID = "com.beacon.emergency";
-
+  
+  // Repositories
+  late final DeviceRepository deviceRepository;
+  late final ClusterRepository clusterRepository;
+  late final ClusterMemberRepository clusterMemberRepository;
+  
   // Shared state
   final Map<String, String> _activeConnections = {};
   final List<String> _connectedEndpoints = [];
-
   late String deviceName;
   late String uuid;
 
@@ -44,10 +49,27 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
   List<String> get connectedEndpoints => (_connectedEndpoints);
   Map<String, String> get activeConnections => _activeConnections;
 
-  Future<void> init() async {
+  Future<void> init(
+    DeviceRepository deviceRepo,
+    ClusterRepository clusterRepo,
+    ClusterMemberRepository clusterMemberRepo,
+  ) async {
+    // Assign repositories
+    deviceRepository = deviceRepo;
+    clusterRepository = clusterRepo;
+    clusterMemberRepository = clusterMemberRepo;
+    
+    // Initialize deviceName and uuid
     deviceName = await _getDeviceName();
     uuid = await _getDeviceUUID();
-    PayloadStrategyFactory.initialize(this);
+    
+    // initialize the repositories and pass them to the factory
+    PayloadStrategyFactory.initialize(
+      this,
+      deviceRepository,
+      clusterRepository,
+      clusterMemberRepository,
+    );
     notifyListeners();
   }
 
@@ -75,7 +97,6 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
       Permission.locationWhenInUse,
       Permission.bluetooth,
     ];
-
     if (Platform.isAndroid) {
       final info = await DeviceInfoPlugin().androidInfo;
       int sdkInt = info.version.sdkInt;
@@ -88,7 +109,6 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
       }
       if (sdkInt >= 33) permissions.add(Permission.nearbyWifiDevices);
     }
-
     final statuses = await permissions.request();
     return statuses.values.every((s) => s.isGranted);
   }
@@ -99,21 +119,17 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
       if (payload.type == PayloadType.BYTES && payload.bytes != null) {
         final raw = String.fromCharCodes(payload.bytes!);
         final decoded = jsonDecode(raw);
-
         if (decoded is! Map) {
           print("[Nearby] invalid message shape");
           return;
         }
-
         final map = Map<String, dynamic>.from(decoded);
         final type = map["type"];
         final data = map["data"];
-
         if (type == null || data == null || data is! Map) {
           print("[Nearby] missing type/data");
           return;
         }
-
         final handler = PayloadStrategyFactory.getHandler(type);
         handler.handle(endpointId, Map<String, dynamic>.from(data));
       }
@@ -141,7 +157,7 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
   }
 
   void onPayloadUpdate(String endpointId, PayloadTransferUpdate update) {}
-
+  
   Future<void> stopAll() async {
     print("[Nearby]: stopping all");
     try {
@@ -151,7 +167,6 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
     } catch (e) {
       print('[Nearby] stopAll error: $e');
     }
-
     _connectedEndpoints.clear();
     _activeConnections.clear();
     notifyListeners();

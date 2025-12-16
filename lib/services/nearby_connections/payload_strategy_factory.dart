@@ -1,3 +1,5 @@
+import 'package:beacon_project/models/cluster.dart';
+
 import 'payload_strategy.dart';
 import 'cluster_info_payload_strategy.dart';
 import 'mark_offline_payload_strategy.dart';
@@ -8,13 +10,27 @@ import 'transfer_ownership_payload_strategy.dart';
 import 'owner_changed_payload_strategy.dart';
 import 'ownership_transferred_payload_strategy.dart';
 
+import 'package:beacon_project/repositories/device_repository.dart';
+import 'package:beacon_project/repositories/cluster_repository.dart';
+import 'package:beacon_project/repositories/cluster_member_repository.dart';
 
 class PayloadStrategyFactory {
   // Store beacon instance for dependency injection
   static NearbyConnectionsBase? _beacon;
+  static DeviceRepository? _deviceRepository;
+  static ClusterRepository? _clusterRepository;
+  static ClusterMemberRepository? _clusterMemberRepository;
 
   // Initialize factory with beacon instance
-  static void initialize(NearbyConnectionsBase beacon) {
+  static void initialize(
+    NearbyConnectionsBase beacon,
+    DeviceRepository deviceRepository,
+    ClusterRepository clusterRepository,
+    ClusterMemberRepository clusterMemberRepository,
+  ) {
+    _deviceRepository = deviceRepository;
+    _clusterRepository = clusterRepository;
+    _clusterMemberRepository = clusterMemberRepository;
     _beacon = beacon;
   }
 
@@ -27,9 +43,9 @@ class PayloadStrategyFactory {
 
     switch (type) {
       case "MARK_OFFLINE":
-        return MarkOfflinePayloadStrategy(_beacon!);
+        return MarkOfflinePayloadStrategy(_beacon!, _deviceRepository!);
       case "MARK_ONLINE":
-        return MarkOnlinePayloadStrategy(_beacon!);
+        return MarkOnlinePayloadStrategy(_beacon!, _deviceRepository!);
       case "CLUSTER_INFO":
         return ClusterInfoPayloadStrategy(_beacon!);
       case "RESOURCES":
@@ -40,8 +56,6 @@ class PayloadStrategyFactory {
         return OwnerChangedPayloadStrategy(_beacon!);
       case "OWNERSHIP_TRANSFERRED":
         return OwnershipTransferredPayloadStrategy(_beacon!);
-
-      
 
       default:
         return UnknownPayloadStrategy();

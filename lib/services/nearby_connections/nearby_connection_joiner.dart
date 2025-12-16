@@ -28,13 +28,21 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
     print("[Nearby]: starting joiner");
     if (!await requestNearbyPermissions()) return;
 
-    final existingMembership = await clusterMemberRepository
-        .getMembersByDeviceUuid(uuid);
+    // Ensure repositories and device info are initialized
+    if (clusterMemberRepository == null || 
+        clusterRepository == null || 
+        uuid == null) {
+      print('[Nearby] Error: repositories or device UUID not initialized');
+      return;
+    }
+
+    final existingMembership = await clusterMemberRepository!
+        .getMembersByDeviceUuid(uuid!);
 
     if (existingMembership.isNotEmpty) {
       print('[Nearby] existing cluster membership found for joiner');
       final clusterId = existingMembership.first.clusterId;
-      final cluster = await clusterRepository.getClusterById(clusterId);
+      final cluster = await clusterRepository!.getClusterById(clusterId);
 
       if (cluster != null) {
         _joinedCluster = cluster;
@@ -49,6 +57,13 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
 
   Future<void> _startAdvertising() async {
     print("[Nearby]: joiner advertising");
+    
+    // Ensure deviceName and uuid are initialized
+    if (uuid == null || deviceName == null) {
+      print('[Nearby] Error: deviceName or uuid not initialized in _startAdvertising');
+      return;
+    }
+    
     final endpointName = "as|$uuid|$deviceName";
 
     try {
@@ -67,9 +82,16 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
 
   Future<void> _startDiscovery() async {
     print("[Nearby]: joiner discovering");
+    
+    // Ensure deviceName is initialized
+    if (deviceName == null) {
+      print('[Nearby] Error: deviceName not initialized in _startDiscovery');
+      return;
+    }
+    
     try {
       await Nearby().startDiscovery(
-        deviceName,
+        deviceName!,
         NearbyConnectionsBase.STRATEGY,
         serviceId: NearbyConnectionsBase.SERVICE_ID,
         onEndpointFound: _onClusterFoundHandler,
@@ -108,10 +130,18 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
     String initiatorUuid,
     String clusterId,
   ) async {
+    // Ensure repositories and uuid are initialized
+    if (clusterMemberRepository == null || 
+        deviceRepository == null || 
+        uuid == null) {
+      print('[Nearby] Error: repositories or uuid not initialized in _determineConnectionType');
+      return;
+    }
+
     try {
-      final isMember = await clusterMemberRepository.isMemberOfCluster(
+      final isMember = await clusterMemberRepository!.isMemberOfCluster(
         clusterId,
-        uuid,
+        uuid!,
       );
 
       if (isMember) {
@@ -126,7 +156,7 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
           onPayloadTransferUpdate: onPayloadUpdate,
         );
 
-        await deviceRepository.updateDeviceStatus(initiatorUuid, "Connected");
+        await deviceRepository!.updateDeviceStatus(initiatorUuid, "Connected");
       } else {
         // Cluster invite - prompt user
         print('[Nearby] Cluster invite received from owner $initiatorUuid');
@@ -156,19 +186,28 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
     final remoteUuid = data.remoteUuid;
     final clusterId = data.clusterId;
 
+    // Ensure repositories and uuid are initialized
+    if (clusterMemberRepository == null || 
+        clusterRepository == null || 
+        deviceRepository == null || 
+        uuid == null) {
+      print('[Nearby] Error: repositories or uuid not initialized in _onConnectionResult');
+      return;
+    }
+
     try {
-      final isMember = await clusterMemberRepository.isMemberOfCluster(
+      final isMember = await clusterMemberRepository!.isMemberOfCluster(
         clusterId,
-        uuid,
+        uuid!,
       );
 
       if (!isMember) {
         // First time joining
-        await clusterMemberRepository.insertMember(
-          ClusterMember(clusterId: clusterId, deviceUuid: uuid),
+        await clusterMemberRepository!.insertMember(
+          ClusterMember(clusterId: clusterId, deviceUuid: uuid!),
         );
 
-        final cluster = await clusterRepository.getClusterById(clusterId);
+        final cluster = await clusterRepository!.getClusterById(clusterId);
         if (cluster != null) {
           _joinedCluster = cluster;
         }
@@ -179,7 +218,7 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
         _connectedEndpoints.add(endpointId);
       }
 
-      await deviceRepository.updateDeviceStatus(remoteUuid, "Connected");
+      await deviceRepository!.updateDeviceStatus(remoteUuid, "Connected");
       notifyListeners();
       print('[Nearby] Connection established successfully with $remoteUuid');
     } catch (e) {
@@ -189,6 +228,14 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
 
   Future<void> acceptInvite(String endpointId) async {
     print('[Nearby] acceptInvite called');
+
+    // Ensure repositories and uuid are initialized
+    if (clusterMemberRepository == null || 
+        clusterRepository == null || 
+        uuid == null) {
+      print('[Nearby] Error: repositories or uuid not initialized in acceptInvite');
+      return;
+    }
 
     try {
       final pending = _pendingConnections.remove(endpointId);
@@ -200,11 +247,11 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
       final ownerUuid = pending.remoteUuid;
       final clusterId = pending.clusterId;
 
-      await clusterMemberRepository.insertMember(
-        ClusterMember(clusterId: clusterId, deviceUuid: uuid),
+      await clusterMemberRepository!.insertMember(
+        ClusterMember(clusterId: clusterId, deviceUuid: uuid!),
       );
 
-      final cluster = await clusterRepository.getClusterById(clusterId);
+      final cluster = await clusterRepository!.getClusterById(clusterId);
       if (cluster != null) {
         _joinedCluster = cluster;
       }
@@ -247,9 +294,15 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
 
     if (devUuid == null) return;
 
+    // Ensure repositories and uuid are initialized
+    if (deviceRepository == null || clusterMemberRepository == null || uuid == null) {
+      print('[Nearby] Error: repositories or uuid not initialized in _onDisconnected');
+      return;
+    }
+
     try {
-      await deviceRepository.updateDeviceStatus(devUuid, "Disconnected");
-      await clusterMemberRepository.deleteAllMembersByDevice(uuid);
+      await deviceRepository!.updateDeviceStatus(devUuid, "Disconnected");
+      await clusterMemberRepository!.deleteAllMembersByDevice(uuid!);
       await _loadDiscoveredClusters();
       notifyListeners();
     } catch (e) {
@@ -279,16 +332,22 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
         onConnectionResult: (id, status) async {
           if (status != Status.CONNECTED) return;
 
+          // Ensure repositories and uuid are initialized
+          if (clusterRepository == null || clusterMemberRepository == null || uuid == null) {
+            print('[Nearby] Error: repositories or uuid not initialized in joinCluster callback');
+            return;
+          }
+
           try {
-            final cluster = await clusterRepository.getClusterById(clusterId);
+            final cluster = await clusterRepository!.getClusterById(clusterId);
 
             if (cluster != null) {
               print('[Nearby] joinCluster: cluster found');
               _joinedCluster = cluster;
             }
 
-            await clusterMemberRepository.insertMember(
-              ClusterMember(clusterId: clusterId, deviceUuid: uuid),
+            await clusterMemberRepository!.insertMember(
+              ClusterMember(clusterId: clusterId, deviceUuid: uuid!),
             );
 
             _activeConnections[id] = _joinedCluster!.ownerUuid;
@@ -305,7 +364,14 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
           _connectedEndpoints.remove(id);
           _joinedCluster = null;
 
-          await clusterMemberRepository.deleteAllMembersByDevice(uuid);
+          // Ensure repositories and uuid are initialized
+          if (clusterMemberRepository != null && uuid != null) {
+            try {
+              await clusterMemberRepository!.deleteAllMembersByDevice(uuid!);
+            } catch (e) {
+              print('[Nearby] error in joinCluster onDisconnected: $e');
+            }
+          }
           await _loadDiscoveredClusters();
           notifyListeners();
         },
@@ -336,11 +402,20 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
     _connectedEndpoints.clear();
     _activeConnections.clear();
 
-    try {
-      await clusterMemberRepository.deleteAllMembersByDevice(uuid);
-      await deviceRepository.updateDeviceStatus(ownerUuid, "Disconnected");
-    } catch (e) {
-      print('[Nearby] disconnectFromCluster error: $e');
+    // Ensure repositories and uuid are initialized before cleanup
+    if (clusterMemberRepository != null && uuid != null) {
+      try {
+        await clusterMemberRepository!.deleteAllMembersByDevice(uuid!);
+      } catch (e) {
+        print('[Nearby] error deleting membership: $e');
+      }
+    }
+    if (deviceRepository != null && ownerUuid != null) {
+      try {
+        await deviceRepository!.updateDeviceStatus(ownerUuid, "Disconnected");
+      } catch (e) {
+        print('[Nearby] error updating device status: $e');
+      }
     }
 
     _joinedCluster = null;
@@ -365,11 +440,17 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
       final deviceUuid = parts[1];
       final deviceName = parts[2];
 
+      // Ensure deviceRepository is initialized
+      if (deviceRepository == null) {
+        print('[Nearby] Error: deviceRepository not initialized in _onClusterFoundHandler');
+        return;
+      }
+
       try {
-        final existing = await deviceRepository.getDeviceByUuid(deviceUuid);
+        final existing = await deviceRepository!.getDeviceByUuid(deviceUuid);
 
         if (existing == null) {
-          await deviceRepository.insertDevice(
+          await deviceRepository!.insertDevice(
             Device(
               uuid: deviceUuid,
               deviceName: deviceName,
@@ -387,7 +468,7 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
           existing.inRange = true;
           existing.lastSeen = DateTime.now();
           existing.updatedAt = DateTime.now();
-          await deviceRepository.updateDevice(existing);
+          await deviceRepository!.updateDevice(existing);
           print('[Nearby] Device endpoint updated: $deviceName ($deviceUuid)');
         }
 
@@ -405,8 +486,14 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
       final clusterId = parts[2];
       final clusterName = parts[3];
 
+      // Ensure clusterRepository is initialized
+      if (clusterRepository == null) {
+        print('[Nearby] Error: clusterRepository not initialized in _onClusterFoundHandler');
+        return;
+      }
+
       try {
-        await clusterRepository.insertCluster(
+        await clusterRepository!.insertCluster(
           Cluster(
             clusterId: clusterId,
             ownerUuid: ownerUuid,
@@ -426,9 +513,15 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
   Future<void> _loadDiscoveredClusters() async {
     print('[Nearby] loading discovered clusters');
 
-    final clusters = await clusterRepository.getAllClusters();
-    final myMemberships = await clusterMemberRepository.getMembersByDeviceUuid(
-      uuid,
+    // Ensure repositories and uuid are initialized
+    if (clusterRepository == null || clusterMemberRepository == null || uuid == null) {
+      print('[Nearby] Error: repositories or uuid not initialized in _loadDiscoveredClusters');
+      return;
+    }
+
+    final clusters = await clusterRepository!.getAllClusters();
+    final myMemberships = await clusterMemberRepository!.getMembersByDeviceUuid(
+      uuid!,
     );
 
     _discoveredClusters.clear();
@@ -453,10 +546,14 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
 
     try {
       // Find and delete cluster by endpoint
-      final clusters = await clusterRepository.getAllClusters();
+      if (clusterRepository == null) {
+        print('[Nearby] Error: clusterRepository not initialized in _onClusterLost');
+        return;
+      }
+      final clusters = await clusterRepository!.getAllClusters();
       for (var cluster in clusters) {
         if (cluster.ownerEndpointId == endpointId) {
-          await clusterRepository.deleteCluster(cluster.clusterId);
+          await clusterRepository!.deleteCluster(cluster.clusterId);
           break;
         }
       }

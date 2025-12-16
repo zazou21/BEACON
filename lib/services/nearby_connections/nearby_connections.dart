@@ -34,16 +34,16 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
   static const STRATEGY = Strategy.P2P_CLUSTER;
   static const SERVICE_ID = "com.beacon.emergency";
   
-  // Repositories
-  late final DeviceRepository deviceRepository;
-  late final ClusterRepository clusterRepository;
-  late final ClusterMemberRepository clusterMemberRepository;
+  // Repositories (nullable to allow re-initialization for singletons)
+  DeviceRepository? deviceRepository;
+  ClusterRepository? clusterRepository;
+  ClusterMemberRepository? clusterMemberRepository;
   
   // Shared state
   final Map<String, String> _activeConnections = {};
   final List<String> _connectedEndpoints = [];
-  late String deviceName;
-  late String uuid;
+  String? deviceName;
+  String? uuid;
 
   // Getters for reactive state
   List<String> get connectedEndpoints => (_connectedEndpoints);
@@ -54,7 +54,7 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
     ClusterRepository clusterRepo,
     ClusterMemberRepository clusterMemberRepo,
   ) async {
-    // Assign repositories
+    // Assign repositories (allow re-assignment for singleton reuse)
     deviceRepository = deviceRepo;
     clusterRepository = clusterRepo;
     clusterMemberRepository = clusterMemberRepo;
@@ -66,9 +66,9 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
     // initialize the repositories and pass them to the factory
     PayloadStrategyFactory.initialize(
       this,
-      deviceRepository,
-      clusterRepository,
-      clusterMemberRepository,
+      deviceRepo,
+      clusterRepo,
+      clusterMemberRepo,
     );
     notifyListeners();
   }
@@ -157,6 +157,17 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
   }
 
   void onPayloadUpdate(String endpointId, PayloadTransferUpdate update) {}
+  
+  /// Reset singleton state to allow re-initialization
+  void resetState() {
+    deviceRepository = null;
+    clusterRepository = null;
+    clusterMemberRepository = null;
+    deviceName = null;
+    uuid = null;
+    _connectedEndpoints.clear();
+    _activeConnections.clear();
+  }
   
   Future<void> stopAll() async {
     print("[Nearby]: stopping all");

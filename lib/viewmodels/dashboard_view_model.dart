@@ -103,6 +103,9 @@ class DashboardViewModel extends ChangeNotifier {
       currentCluster = await clusterRepository.getClusterByOwnerUuid(myUuid);
     }
 
+    debugPrint(
+        "[DASHBOARD]: current cluster loaded: ${currentCluster?.name ?? 'none'}");
+
     notifyListeners();
   }
 
@@ -110,12 +113,18 @@ class DashboardViewModel extends ChangeNotifier {
     print("[DASHBOARD]: loading connected devices");
     if (currentCluster == null) return;
 
+    // Ensure uuid is initialized
+    if (nearby.uuid == null) {
+      print('[DASHBOARD] Error: device uuid not initialized');
+      return;
+    }
+
     final members = await clusterMemberRepository.getMembersByClusterId(
       currentCluster!.clusterId,
     );
 
     final deviceUuids = members
-        .where((m) => m.deviceUuid != nearby.uuid)
+        .where((m) => m.deviceUuid != nearby.uuid!)
         .map((m) => m.deviceUuid)
         .toList();
 
@@ -124,6 +133,9 @@ class DashboardViewModel extends ChangeNotifier {
     } else {
       connectedDevices = await deviceRepository.getDevicesByUuids(deviceUuids);
     }
+
+    debugPrint(
+        "[DASHBOARD]: connected devices loaded: ${connectedDevices.length}");
 
     notifyListeners();
   }
@@ -169,8 +181,14 @@ class DashboardViewModel extends ChangeNotifier {
       joinedCluster!.clusterId,
     );
 
+    // Ensure uuid is initialized
+    if (nearby.uuid == null) {
+      print('[DASHBOARD] Error: device uuid not initialized');
+      return;
+    }
+
     final deviceUuids = members
-        .where((m) => m.deviceUuid != nearby.uuid)
+        .where((m) => m.deviceUuid != nearby.uuid!)
         .map((m) => m.deviceUuid)
         .toList();
 

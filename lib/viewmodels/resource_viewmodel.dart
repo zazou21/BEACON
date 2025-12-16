@@ -55,7 +55,7 @@ class ResourceViewModel extends ChangeNotifier {
   //ehtemal akhali da injection bardo
   late SharedPreferences prefs;
   NearbyConnectionsBase? beacon;
-  late StreamSubscription<List<Resource>>? _resourceStreamSubscription;
+  StreamSubscription<List<Resource>>? _resourceStreamSubscription;
   StreamSubscription<List<Resource>>? get resourceStreamSubscription =>
       _resourceStreamSubscription;
 
@@ -163,7 +163,12 @@ class ResourceViewModel extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      final String userUuid = beacon!.uuid;
+      // Ensure beacon and uuid are initialized
+      if (beacon == null || beacon!.uuid == null) {
+        throw Exception('Beacon service or device UUID not initialized');
+      }
+
+      final String userUuid = beacon!.uuid!;
 
       final newResource = Resource(
         resourceName: name,
@@ -201,7 +206,12 @@ class ResourceViewModel extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      final String userUuid = beacon!.uuid;
+      // Ensure beacon and uuid are initialized
+      if (beacon == null || beacon!.uuid == null) {
+        throw Exception('Beacon service or device UUID not initialized');
+      }
+
+      final String userUuid = beacon!.uuid!;
 
       final newResource = Resource(
         resourceName: name,

@@ -81,6 +81,9 @@ class _DashboardPageState extends State<DashboardPage> {
       await Future.delayed(const Duration(milliseconds: 800));
 
       _viewModel.nearby.removeListener(_viewModel.onNearbyStateChanged);
+      
+      // Reset singleton state before reusing
+      _viewModel.nearby.resetState();
 
       setState(() {
         _currentMode = newMode;

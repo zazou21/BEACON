@@ -612,10 +612,10 @@ packages:
     dependency: "direct main"
     description:
       name: shared_preferences
-      sha256: "6e8bf70b7fef813df4e9a36f658ac46d107db4b4cfe1048b477d4e453a8159f5"
+      sha256: "2939ae520c9024cb197fc20dee269cd8cdbf564c8b5746374ec6cacdc5169e64"
       url: "https://pub.dev"
     source: hosted
-    version: "2.5.3"
+    version: "2.5.4"
   shared_preferences_android:
     dependency: transitive
     description:
@@ -773,7 +773,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.4.0"
-<<<<<<< HEAD
   sqflite_sqlcipher:
     dependency: "direct main"
     description:
@@ -782,7 +781,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.4.0"
-=======
   sqlite3:
     dependency: transitive
     description:
@@ -791,7 +789,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.9.4"
->>>>>>> karim
   stack_trace:
     dependency: transitive
     description:

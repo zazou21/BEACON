@@ -34,9 +34,9 @@ class TransferOwnershipPayloadStrategy implements PayloadStrategy {
     final members = data['members'] as List;
     final devices = data['devices'] as List;
 
-    // Only proceed if I'm the new owner
-    if (newOwnerUuid != beacon.uuid) {
-      print('[Payload]: Not selected as new owner');
+    // Only proceed if I'm the new owner and uuid is initialized
+    if (beacon.uuid == null || newOwnerUuid != beacon.uuid) {
+      print('[Payload]: Not selected as new owner or uuid not initialized');
       return;
     }
 

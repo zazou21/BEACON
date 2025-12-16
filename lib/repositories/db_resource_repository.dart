@@ -19,7 +19,7 @@ class DbResourceRepository implements ResourceRepository {
   @override
   Future<List<Device>> fetchConnectedDevices() async {
     final database = await dbService.database;
-    final String deviceUuid = beacon.uuid;
+    final String? deviceUuid = beacon.uuid;
 
     final joined = await database.query(
       'cluster_members',

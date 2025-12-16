@@ -28,13 +28,13 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
     print("[Nearby]: starting joiner");
     if (!await requestNearbyPermissions()) return;
 
-    final existingMembership = await clusterMemberRepository
+    final existingMembership = await clusterMemberRepository!
         .getMembersByDeviceUuid(uuid);
 
     if (existingMembership.isNotEmpty) {
       print('[Nearby] existing cluster membership found for joiner');
       final clusterId = existingMembership.first.clusterId;
-      final cluster = await clusterRepository.getClusterById(clusterId);
+      final cluster = await clusterRepository!.getClusterById(clusterId);
 
       if (cluster != null) {
         _joinedCluster = cluster;
@@ -109,7 +109,7 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
     String clusterId,
   ) async {
     try {
-      final isMember = await clusterMemberRepository.isMemberOfCluster(
+      final isMember = await clusterMemberRepository!.isMemberOfCluster(
         clusterId,
         uuid,
       );
@@ -126,7 +126,7 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
           onPayloadTransferUpdate: onPayloadUpdate,
         );
 
-        await deviceRepository.updateDeviceStatus(initiatorUuid, "Connected");
+        await deviceRepository!.updateDeviceStatus(initiatorUuid, "Connected");
       } else {
         // Cluster invite - prompt user
         print('[Nearby] Cluster invite received from owner $initiatorUuid');
@@ -157,18 +157,18 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
     final clusterId = data.clusterId;
 
     try {
-      final isMember = await clusterMemberRepository.isMemberOfCluster(
+      final isMember = await clusterMemberRepository!.isMemberOfCluster(
         clusterId,
         uuid,
       );
 
       if (!isMember) {
         // First time joining
-        await clusterMemberRepository.insertMember(
+        await clusterMemberRepository!.insertMember(
           ClusterMember(clusterId: clusterId, deviceUuid: uuid),
         );
 
-        final cluster = await clusterRepository.getClusterById(clusterId);
+        final cluster = await clusterRepository!.getClusterById(clusterId);
         if (cluster != null) {
           _joinedCluster = cluster;
         }
@@ -179,7 +179,7 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
         _connectedEndpoints.add(endpointId);
       }
 
-      await deviceRepository.updateDeviceStatus(remoteUuid, "Connected");
+      await deviceRepository!.updateDeviceStatus(remoteUuid, "Connected");
       notifyListeners();
       print('[Nearby] Connection established successfully with $remoteUuid');
     } catch (e) {
@@ -200,11 +200,11 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
       final ownerUuid = pending.remoteUuid;
       final clusterId = pending.clusterId;
 
-      await clusterMemberRepository.insertMember(
+      await clusterMemberRepository!.insertMember(
         ClusterMember(clusterId: clusterId, deviceUuid: uuid),
       );
 
-      final cluster = await clusterRepository.getClusterById(clusterId);
+      final cluster = await clusterRepository!.getClusterById(clusterId);
       if (cluster != null) {
         _joinedCluster = cluster;
       }
@@ -248,8 +248,8 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
     if (devUuid == null) return;
 
     try {
-      await deviceRepository.updateDeviceStatus(devUuid, "Disconnected");
-      await clusterMemberRepository.deleteAllMembersByDevice(uuid);
+      await deviceRepository!.updateDeviceStatus(devUuid, "Disconnected");
+      await clusterMemberRepository!.deleteAllMembersByDevice(uuid);
       await _loadDiscoveredClusters();
       notifyListeners();
     } catch (e) {
@@ -280,14 +280,14 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
           if (status != Status.CONNECTED) return;
 
           try {
-            final cluster = await clusterRepository.getClusterById(clusterId);
+            final cluster = await clusterRepository!.getClusterById(clusterId);
 
             if (cluster != null) {
               print('[Nearby] joinCluster: cluster found');
               _joinedCluster = cluster;
             }
 
-            await clusterMemberRepository.insertMember(
+            await clusterMemberRepository!.insertMember(
               ClusterMember(clusterId: clusterId, deviceUuid: uuid),
             );
 
@@ -305,7 +305,7 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
           _connectedEndpoints.remove(id);
           _joinedCluster = null;
 
-          await clusterMemberRepository.deleteAllMembersByDevice(uuid);
+          await clusterMemberRepository!.deleteAllMembersByDevice(uuid);
           await _loadDiscoveredClusters();
           notifyListeners();
         },
@@ -337,8 +337,8 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
     _activeConnections.clear();
 
     try {
-      await clusterMemberRepository.deleteAllMembersByDevice(uuid);
-      await deviceRepository.updateDeviceStatus(ownerUuid, "Disconnected");
+      await clusterMemberRepository!.deleteAllMembersByDevice(uuid);
+      await deviceRepository!.updateDeviceStatus(ownerUuid, "Disconnected");
     } catch (e) {
       print('[Nearby] disconnectFromCluster error: $e');
     }
@@ -366,10 +366,10 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
       final deviceName = parts[2];
 
       try {
-        final existing = await deviceRepository.getDeviceByUuid(deviceUuid);
+        final existing = await deviceRepository!.getDeviceByUuid(deviceUuid);
 
         if (existing == null) {
-          await deviceRepository.insertDevice(
+          await deviceRepository!.insertDevice(
             Device(
               uuid: deviceUuid,
               deviceName: deviceName,
@@ -387,7 +387,7 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
           existing.inRange = true;
           existing.lastSeen = DateTime.now();
           existing.updatedAt = DateTime.now();
-          await deviceRepository.updateDevice(existing);
+          await deviceRepository!.updateDevice(existing);
           print('[Nearby] Device endpoint updated: $deviceName ($deviceUuid)');
         }
 
@@ -406,7 +406,7 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
       final clusterName = parts[3];
 
       try {
-        await clusterRepository.insertCluster(
+        await clusterRepository!.insertCluster(
           Cluster(
             clusterId: clusterId,
             ownerUuid: ownerUuid,
@@ -426,8 +426,8 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
   Future<void> _loadDiscoveredClusters() async {
     print('[Nearby] loading discovered clusters');
 
-    final clusters = await clusterRepository.getAllClusters();
-    final myMemberships = await clusterMemberRepository.getMembersByDeviceUuid(
+    final clusters = await clusterRepository!.getAllClusters();
+    final myMemberships = await clusterMemberRepository!.getMembersByDeviceUuid(
       uuid,
     );
 
@@ -453,10 +453,10 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
 
     try {
       // Find and delete cluster by endpoint
-      final clusters = await clusterRepository.getAllClusters();
+      final clusters = await clusterRepository!.getAllClusters();
       for (var cluster in clusters) {
         if (cluster.ownerEndpointId == endpointId) {
-          await clusterRepository.deleteCluster(cluster.clusterId);
+          await clusterRepository!.deleteCluster(cluster.clusterId);
           break;
         }
       }

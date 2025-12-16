@@ -33,12 +33,12 @@ class PendingInvite {
 abstract class NearbyConnectionsBase extends ChangeNotifier {
   static const STRATEGY = Strategy.P2P_CLUSTER;
   static const SERVICE_ID = "com.beacon.emergency";
-  
+
   // Repositories
-  late final DeviceRepository deviceRepository;
-  late final ClusterRepository clusterRepository;
-  late final ClusterMemberRepository clusterMemberRepository;
-  
+  DeviceRepository? deviceRepository;
+  ClusterRepository? clusterRepository;
+  ClusterMemberRepository? clusterMemberRepository;
+
   // Shared state
   final Map<String, String> _activeConnections = {};
   final List<String> _connectedEndpoints = [];
@@ -58,17 +58,17 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
     deviceRepository = deviceRepo;
     clusterRepository = clusterRepo;
     clusterMemberRepository = clusterMemberRepo;
-    
+
     // Initialize deviceName and uuid
     deviceName = await _getDeviceName();
     uuid = await _getDeviceUUID();
-    
+
     // initialize the repositories and pass them to the factory
     PayloadStrategyFactory.initialize(
       this,
-      deviceRepository,
-      clusterRepository,
-      clusterMemberRepository,
+      deviceRepository!,
+      clusterRepository!,
+      clusterMemberRepository!,
     );
     notifyListeners();
   }
@@ -157,7 +157,7 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
   }
 
   void onPayloadUpdate(String endpointId, PayloadTransferUpdate update) {}
-  
+
   Future<void> stopAll() async {
     print("[Nearby]: stopping all");
     try {

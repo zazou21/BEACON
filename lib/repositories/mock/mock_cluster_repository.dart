@@ -1,4 +1,5 @@
 // lib/repositories/mock/mock_cluster_repository.dart
+
 import 'package:beacon_project/repositories/cluster_repository.dart';
 import 'package:beacon_project/models/cluster.dart';
 
@@ -17,10 +18,14 @@ class MockClusterRepository implements ClusterRepository {
 
   @override
   Future<Cluster?> getClusterByOwnerUuid(String ownerUuid) async {
-    return _clusters.values.firstWhere(
-      (c) => c.ownerUuid == ownerUuid,
-      orElse: () => null as Cluster,
-    );
+    try {
+      return _clusters.values.firstWhere(
+        (c) => c.ownerUuid == ownerUuid,
+      );
+    } catch (e) {
+      // Return null if not found instead of casting null to Cluster
+      return null;
+    }
   }
 
   @override

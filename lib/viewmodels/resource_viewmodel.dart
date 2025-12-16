@@ -8,6 +8,9 @@ import '../repositories/resource_repository.dart';
 import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:beacon_project/repositories/device_repository_impl.dart';
+import 'package:beacon_project/repositories/cluster_repository_impl.dart';
+import 'package:beacon_project/repositories/cluster_member_repository_impl.dart';
 
 class ResourceViewModel extends ChangeNotifier {
   ResourceViewModel({
@@ -90,14 +93,20 @@ class ResourceViewModel extends ChangeNotifier {
 
       beacon!.addListener(_onBeaconStateChanged);
 
-      await beacon!.init();
+    
+      await beacon!.init(
+        DeviceRepositoryImpl(_dbService),
+        ClusterRepositoryImpl(_dbService),
+        ClusterMemberRepositoryImpl(_dbService),
+      );
 
       // Initial load from DB
       await _reloadFromDb();
 
       // Listen to resource updates from the model
-      _resourceStreamSubscription =
-          Resource.resourceUpdateStream.listen((updatedResources) {
+      _resourceStreamSubscription = Resource.resourceUpdateStream.listen((
+        updatedResources,
+      ) {
         print('[ResourceViewModel] Resources updated from stream');
         resources = updatedResources;
         notifyListeners();
@@ -148,8 +157,6 @@ class ResourceViewModel extends ChangeNotifier {
   Future<List<Device>> fetchConnectedDevices() async {
     return await repository.fetchConnectedDevices();
   }
-
- 
 
   Future<void> postResource(String name, String description) async {
     try {

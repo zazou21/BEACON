@@ -1,16 +1,23 @@
 import 'package:nearby_connections/nearby_connections.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
-import 'package:sqflite/sqflite.dart';
-import 'package:beacon_project/services/db_service.dart';
 import 'package:beacon_project/models/device.dart';
+import 'package:beacon_project/models/cluster_member.dart';
+import 'package:beacon_project/repositories/device_repository.dart';
+import 'package:beacon_project/repositories/cluster_member_repository.dart';
 import 'payload_strategy.dart';
 import 'nearby_connections.dart';
 
 class ClusterInfoPayloadStrategy implements PayloadStrategy {
   final NearbyConnectionsBase beacon;
+  final DeviceRepository deviceRepository;
+  final ClusterMemberRepository clusterMemberRepository;
 
-  ClusterInfoPayloadStrategy(this.beacon);
+  ClusterInfoPayloadStrategy(
+    this.beacon,
+    this.deviceRepository,
+    this.clusterMemberRepository,
+  );
 
   @override
   Future<void> handle(String endpointId, Map<String, dynamic> data) async {
@@ -18,7 +25,7 @@ class ClusterInfoPayloadStrategy implements PayloadStrategy {
 
     final clusterId = data['clusterId'] as String?;
     final ownerDeviceMap = data['owner_device'] as Map<String, dynamic>?;
-    final members = data['members'] as List<dynamic>?;
+    final members = data['members'] as List?;
 
     if (clusterId == null || ownerDeviceMap == null || members == null) {
       print("Error: Missing required fields in CLUSTER_INFO payload");
@@ -27,28 +34,26 @@ class ClusterInfoPayloadStrategy implements PayloadStrategy {
 
     try {
       final joinerUuid = await _getDeviceUUID();
-      final db = await DBService().database;
 
       // Parse owner device
       final ownerDevice = Device.fromMap(ownerDeviceMap);
 
-      // Save owner device in database
-      await db.insert(
-        'devices',
+      // Save owner device using repository
+      await deviceRepository.insertDevice(
         Device(
           uuid: ownerDevice.uuid,
           deviceName: ownerDevice.deviceName,
           endpointId: endpointId,
           status: "Connected",
           lastSeen: DateTime.now(),
-        ).toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+        ),
       );
 
       print("Saved cluster owner device to database");
 
       // Process cluster members and connect to those in range
       int connectedCount = 0;
+
       for (final m in members) {
         final memberMap = Map<String, dynamic>.from(m);
         final memberDeviceUuid = memberMap['deviceUuid'] as String;
@@ -56,28 +61,23 @@ class ClusterInfoPayloadStrategy implements PayloadStrategy {
         // Skip joiner's own membership
         if (memberDeviceUuid == joinerUuid) continue;
 
-        // Save cluster membership
-        await db.insert('cluster_members', {
-          'clusterId': memberMap['clusterId'],
-          'deviceUuid': memberDeviceUuid,
-        }, conflictAlgorithm: ConflictAlgorithm.ignore);
-
-        // Query database for device with this UUID
-        final deviceRows = await db.query(
-          'devices',
-          where: 'uuid = ? AND inRange = ?',
-          whereArgs: [memberDeviceUuid, 1],
-          limit: 1,
+        // Save cluster membership using repository
+        await clusterMemberRepository.insertMember(
+          ClusterMember(
+            clusterId: memberMap['clusterId'] as String,
+            deviceUuid: memberDeviceUuid,
+          ),
         );
 
-        if (deviceRows.isEmpty) {
+        // Query for device with this UUID that's in range
+        final device = await deviceRepository.getDeviceByUuid(memberDeviceUuid);
+
+        if (device == null || !device.inRange) {
           print(
             "[Nearby] Member $memberDeviceUuid not in range or not discovered yet",
           );
           continue;
         }
-
-        final device = Device.fromMap(deviceRows.first);
 
         // Verify endpoint ID exists and is not empty
         if (device.endpointId.isEmpty) {
@@ -98,7 +98,7 @@ class ClusterInfoPayloadStrategy implements PayloadStrategy {
           print(
             "[Nearby] Connection to ${device.deviceName} already in progress",
           );
-          connectedCount++; // Count as success since connection is being established
+          connectedCount++;
           continue;
         }
 
@@ -106,26 +106,20 @@ class ClusterInfoPayloadStrategy implements PayloadStrategy {
         try {
           await _connectToClusterMember(device, clusterId, joinerUuid);
           connectedCount++;
-
-          // Delay between connections to avoid overwhelming the system
           await Future.delayed(const Duration(milliseconds: 500));
         } catch (e) {
-          // Handle the ALREADY_CONNECTED error gracefully
           if (e.toString().contains('STATUS_ALREADY_CONNECTED_TO_ENDPOINT')) {
             print(
               "[Nearby] Connection to ${device.deviceName} already established from peer side - this is normal",
             );
-            connectedCount++; // Count as success since connection exists from other direction
+            connectedCount++;
           } else {
             print("[Nearby] Failed to connect to ${device.deviceName}: $e");
-            // Continue to next member
           }
         }
       }
 
       print("Initiated connections to $connectedCount cluster members");
-
-      // Trigger state change notification for UI update
       beacon.notifyListeners();
     } catch (e) {
       print("Error handling CLUSTER_INFO payload: $e");
@@ -142,7 +136,6 @@ class ClusterInfoPayloadStrategy implements PayloadStrategy {
     );
 
     final connectionName = "$joinerUuid|$clusterId";
-
     print(
       '[Nearby] Sending connection invite to endpoint id ${device.endpointId}',
     );
@@ -156,8 +149,6 @@ class ClusterInfoPayloadStrategy implements PayloadStrategy {
         device.endpointId,
         onConnectionInitiated: (id, info) async {
           print("[Nearby] Peer connection initiated with ${device.deviceName}");
-
-          // Add delay to avoid race condition
           await Future.delayed(const Duration(milliseconds: 150));
 
           try {
@@ -179,17 +170,8 @@ class ClusterInfoPayloadStrategy implements PayloadStrategy {
               "[Nearby] Successfully connected to peer ${device.deviceName}",
             );
 
-            // Update device status in database
-            final db = await DBService().database;
-            await db.update(
-              "devices",
-              {
-                "status": "Connected",
-                "lastSeen": DateTime.now().toIso8601String(),
-              },
-              where: "uuid = ?",
-              whereArgs: [device.uuid],
-            );
+            // Update device status using repository
+            await deviceRepository.updateDeviceStatus(device.uuid, "Connected");
 
             // Ensure it's in active connections
             beacon.activeConnections[id] = device.uuid;
@@ -202,7 +184,6 @@ class ClusterInfoPayloadStrategy implements PayloadStrategy {
             print(
               "[Nearby] Failed to connect to peer ${device.deviceName}: $status",
             );
-            // Remove from pending on failure
             beacon.activeConnections.remove(id);
           }
         },
@@ -211,23 +192,15 @@ class ClusterInfoPayloadStrategy implements PayloadStrategy {
           beacon.activeConnections.remove(id);
           beacon.connectedEndpoints.remove(id);
 
-          // Update device status
-          final db = await DBService().database;
-          await db.update(
-            "devices",
-            {
-              "status": "Disconnected",
-              "lastSeen": DateTime.now().toIso8601String(),
-            },
-            where: "uuid = ?",
-            whereArgs: [device.uuid],
+          // Update device status using repository
+          await deviceRepository.updateDeviceStatus(
+            device.uuid,
+            "Disconnected",
           );
-
           beacon.notifyListeners();
         },
       );
     } catch (e) {
-      // Remove from pending connections on error
       beacon.activeConnections.remove(device.endpointId);
       print("[Nearby] Error requesting connection to ${device.deviceName}: $e");
       rethrow;

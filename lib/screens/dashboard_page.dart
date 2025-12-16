@@ -1,4 +1,5 @@
 import 'package:beacon_project/services/text_to_speech.dart';
+import 'package:beacon_project/repositories/device_repository_impl.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -8,6 +9,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:beacon_project/services/nearby_connections/nearby_connections.dart';
 import 'package:beacon_project/services/nearby_connections/mode_change_notifier.dart';
 import 'dart:async';
+import 'package:beacon_project/services/db_service.dart';
+import 'package:beacon_project/repositories/cluster_repository_impl.dart';
+import 'package:beacon_project/repositories/cluster_member_repository.dart';
+import 'package:beacon_project/repositories/cluster_member_repository_impl.dart';
 
 Future<void> saveModeOnce(DashboardMode mode) async {
   final prefs = await SharedPreferences.getInstance();
@@ -37,7 +42,17 @@ class _DashboardPageState extends State<DashboardPage> {
     super.initState();
     _currentMode = widget.mode;
     saveModeOnce(widget.mode);
-    _viewModel = DashboardViewModel(mode: _currentMode);
+    final dbService = DBService();
+    final deviceRepository = DeviceRepositoryImpl(dbService);
+    final clusterRepository = ClusterRepositoryImpl(dbService);
+    final clusterMemberRepository = ClusterMemberRepositoryImpl(dbService);
+
+    _viewModel = DashboardViewModel(
+      mode: _currentMode,
+      deviceRepository: deviceRepository,
+      clusterRepository: clusterRepository,
+      clusterMemberRepository: clusterMemberRepository,
+    );
     _viewModel.initializeNearby();
 
     // Listen for mode changes
@@ -74,7 +89,12 @@ class _DashboardPageState extends State<DashboardPage> {
       print('[Dashboard] Creating new ViewModel for $newMode');
       _viewModel.dispose();
 
-      _viewModel = DashboardViewModel(mode: newMode);
+      _viewModel = DashboardViewModel(
+        mode: newMode,
+        deviceRepository: _viewModel.deviceRepository,
+        clusterRepository: _viewModel.clusterRepository,
+        clusterMemberRepository: _viewModel.clusterMemberRepository,
+      );
 
       print('[Dashboard] Initializing new nearby service...');
       await _viewModel.initializeNearby();
@@ -146,9 +166,6 @@ class _DashboardPageState extends State<DashboardPage> {
       (c) => c["clusterId"] == clusterId,
       orElse: () => {"clusterName": "Unknown"},
     )["clusterName"];
-
-
-
 
     showDialog(
       context: context,

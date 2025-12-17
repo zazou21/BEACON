@@ -7,6 +7,9 @@ import 'package:beacon_project/models/device.dart';
 import 'package:mockito/mockito.dart';
 import '../mocks.mocks.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:beacon_project/repositories/mock/mock_device_repository.dart';
+import 'package:beacon_project/repositories/mock/mock_cluster_repository.dart';
+import 'package:beacon_project/repositories/mock/mock_cluster_member_repository.dart';
 
 
 
@@ -29,8 +32,14 @@ void main() {
     test('init sets variables correctly', () async {
 
       final beacon= MockNearbyConnectionsBase();
+
+      final deviceRepo = MockDeviceRepository();
+      final clusterRepo = MockClusterRepository();
+      final clusterMemberRepo = MockClusterMemberRepository();
       when(beacon.deviceName).thenReturn('TestDevice');
       when(beacon.uuid).thenReturn('TestUUID');
+
+
 
       List<Resource> mockResources = [
         Resource(resourceId: '1',resourceName:"test1" , resourceType: ResourceType.foodWater, resourceDescription: "desc1", userUuid: "uuid1",resourceStatus: ResourceStatus.posted),
@@ -69,7 +78,7 @@ void main() {
       expect(viewModel.isLoading, isFalse);
       expect(viewModel.resources, mockResources);
       expect(viewModel.connectedDevices, mockDevices);
-      verify(beacon.init()).called(1);
+      verify(beacon.init(deviceRepo,clusterRepo,clusterMemberRepo)).called(1);
       expect(notified, greaterThan(1));
       beacon.dispose();
       

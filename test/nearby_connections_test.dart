@@ -1,6 +1,5 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:nearby_connections/nearby_connections.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,12 +13,7 @@ import 'package:beacon_project/repositories/mock/mock_device_repository.dart';
 import 'package:beacon_project/repositories/mock/mock_cluster_repository.dart';
 import 'package:beacon_project/repositories/mock/mock_cluster_member_repository.dart';
 
-import 'nearby_connections_test.mocks.dart';
-
-@GenerateMocks([
-  Nearby,
-  SharedPreferences,
-])
+import 'mocks.mocks.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 

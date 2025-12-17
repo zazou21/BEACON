@@ -15,13 +15,8 @@ import 'package:beacon_project/services/nearby_connections/nearby_connections.da
 import 'package:beacon_project/repositories/mock/mock_device_repository.dart';
 import 'package:beacon_project/repositories/mock/mock_cluster_repository.dart';
 import 'package:beacon_project/repositories/mock/mock_cluster_member_repository.dart';
+import 'mocks.mocks.dart';
 
-import 'dashboard_view_model_test.mocks.dart';
-
-@GenerateMocks([
-  NearbyConnectionsInitiator,
-  NearbyConnectionsJoiner,
-])
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 

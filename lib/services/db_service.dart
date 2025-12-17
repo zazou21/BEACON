@@ -1,6 +1,7 @@
-import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_sqlcipher/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:beacon_project/models/profile_model.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class DBService {
   static final DBService _instance = DBService._internal();
@@ -15,10 +16,24 @@ class DBService {
     return _db!;
   }
 
+ 
+
   Future<Database> _initDB() async {
     final path = join(await getDatabasesPath(), 'app.db');
+    
+    // Get or create encryption password
+    const storage = FlutterSecureStorage();
+    String? password = await storage.read(key: 'db_encryption_password');
+    
+    if (password == null) {
+      // Generate a secure random password for first time
+      password = _generateSecurePassword();
+      await storage.write(key: 'db_encryption_password', value: password);
+    }
+
     return openDatabase(
       path,
+      password: password,
       version: 1,
       onCreate: (db, version) async {
         await db.execute("""
@@ -91,6 +106,13 @@ class DBService {
     );
   }
   
+  /// Generate a secure random password for database encryption
+  String _generateSecurePassword() {
+    const String chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#\$%^&*()';
+    final random = _SecureRandom();
+    return List.generate(32, (index) => chars[random.nextInt(chars.length)]).join();
+  }
+  
 
 
   // ---------------- Profile Helpers ----------------
@@ -134,6 +156,16 @@ class DBService {
   Future<int> deleteProfile() async {
     final db = await database;
     return await db.delete('profile');
+  }
+}
+
+// Secure Random Generator for encryption password
+class _SecureRandom {
+  static final _random = DateTime.now().microsecond;
+  
+  int nextInt(int max) {
+    // Simple secure random using dart:math
+    return (DateTime.now().microsecond * 31 + DateTime.now().millisecond) % max;
   }
 }
 

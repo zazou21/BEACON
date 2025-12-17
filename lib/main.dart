@@ -1,8 +1,11 @@
+import 'package:beacon_project/services/text_to_speech.dart';
+import 'package:beacon_project/viewmodels/dashboard_view_model.dart';
+import 'package:beacon_project/viewmodels/resource_viewmodel.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import 'theme.dart';
 import 'screens/dashboard_page.dart';
-import 'viewmodels/dashboard_view_model.dart';
 import 'screens/chat_page.dart';
 import 'screens/resources_page.dart';
 import 'screens/profile_page.dart';
@@ -214,6 +217,7 @@ class DbFlushButton extends StatelessWidget {
   }
 }
 
+
 void onFlush() async {
   final db = await DBService().database;
   await db.delete('devices');
@@ -318,7 +322,7 @@ class LandingPage extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 24),
-        VoiceCommandWidget(),
+        VoiceCommandWidget(buttonMode:true),
       ],
     );
   }
@@ -399,6 +403,17 @@ class _HomeShellState extends State<HomeShell> {
   Future<DashboardMode?> getSavedDashboardMode() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString('dashboard_mode');
+    ResourceViewModel? resourceViewModel;
+    DashboardViewModel? dashboardViewModel;
+
+    void setResourceViewModel(ResourceViewModel vm) {
+      resourceViewModel = vm;
+    }
+
+    void setDashboardViewModel(DashboardViewModel vm) {
+      dashboardViewModel = vm;
+    }
+
 
     if (saved == null) return null;
     return DashboardMode.values.firstWhere(
@@ -480,6 +495,8 @@ class _HomeShellState extends State<HomeShell> {
         actions: const [
           ThemeToggleButton(),
           DbFlushButton(onFlush: onFlush),
+          
+
         ],
       ),
       body: Stack(
@@ -491,7 +508,7 @@ class _HomeShellState extends State<HomeShell> {
           Positioned(
             right: 16,
             bottom: kBottomNavigationBarHeight + 6,
-            child: const _VoiceToggleButton(),
+            child: const VoiceCommandWidget(),
           ),
         ],
       ),
@@ -517,29 +534,3 @@ class _HomeShellState extends State<HomeShell> {
   }
 }
 
-class _VoiceToggleButton extends StatelessWidget {
-  const _VoiceToggleButton();
-
-  @override
-  Widget build(BuildContext context) {
-    return FloatingActionButton.small(
-      heroTag: 'voice-toggle-fab',
-      onPressed: () {
-        showModalBottomSheet(
-          context: context,
-          isScrollControlled: true,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-          ),
-          builder: (ctx) {
-            return const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: VoiceCommandWidget(),
-            );
-          },
-        );
-      },
-      child: const Icon(Icons.mic),
-    );
-  }
-}

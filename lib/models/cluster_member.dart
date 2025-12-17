@@ -1,3 +1,4 @@
+// lib/models/cluster_member.dart
 class ClusterMember {
   String clusterId;
   String deviceUuid;
@@ -21,7 +22,10 @@ class ClusterMember {
     return ClusterMember(
       clusterId: map['clusterId'],
       deviceUuid: map['deviceUuid'],
-      joinedAt: DateTime.fromMillisecondsSinceEpoch(map['joinedAt']),
+      // Handle null joinedAt - use current time if null
+      joinedAt: map['joinedAt'] != null 
+          ? DateTime.fromMillisecondsSinceEpoch(map['joinedAt'] as int)
+          : null, // Will default to DateTime.now() in constructor
     );
   }
 }

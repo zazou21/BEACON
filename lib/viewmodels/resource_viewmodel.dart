@@ -1,30 +1,78 @@
 import 'package:flutter/foundation.dart';
-import 'package:sqflite/sqlite_api.dart';
 import 'dart:async';
 import '../models/resource.dart';
 import '../models/device.dart';
 import '../services/db_service.dart';
 import '../services/nearby_connections/nearby_connections.dart';
+import '../repositories/resource_repository.dart';
 import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:beacon_project/repositories/device_repository_impl.dart';
+import 'package:beacon_project/repositories/cluster_repository_impl.dart';
+import 'package:beacon_project/repositories/cluster_member_repository_impl.dart';
 
 class ResourceViewModel extends ChangeNotifier {
+  ResourceViewModel({
+    ResourceRepository? repository,
+    DBService? dbService,
+    NearbyConnectionsBase? nearbyConnections,
+  })  : _providedRepository = repository,
+        _dbService = dbService ?? DBService(),
+        beacon = nearbyConnections;
+
+  // test en el default sah
+
   ResourceType selectedTab = ResourceType.foodWater;
+  ResourceType get getSelectedTab => selectedTab;
+
+  void setSelectedTab(ResourceType type) {
+    selectedTab = type;
+    notifyListeners();
+  } 
+
+
+
   List<Resource> resources = [];
+  List<Resource> get getResources => resources;
+  void setResources(List<Resource> res) {
+    resources = res;
+    notifyListeners();
+  }
+
   List<Device> connectedDevices = [];
+  List<Device> get getConnectedDevices => connectedDevices;
+  void setConnectedDevices(List<Device> devices) {
+    connectedDevices = devices;
+    notifyListeners();
+  }
   String? clusterId;
 
+  
+  late ResourceRepository repository;
+  final ResourceRepository? _providedRepository;
+  final DBService _dbService;
+  //ehtemal akhali da injection bardo
   late SharedPreferences prefs;
-  final DBService dbService = DBService();
-
-  late NearbyConnectionsBase beacon;
-  late StreamSubscription<List<Resource>> _resourceStreamSubscription;
+  NearbyConnectionsBase? beacon;
+  StreamSubscription<List<Resource>>? _resourceStreamSubscription;
+  StreamSubscription<List<Resource>>? get resourceStreamSubscription =>
+      _resourceStreamSubscription;
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
+  void setIsLoading(bool loading) {
+    _isLoading = loading;
+    notifyListeners();
+  }
+
+  
 
   // ---------- INIT & LISTENER SETUP ----------
+  //test eh fil init
+
+
+  //el is loading changes test
 
   Future<void> init() async {
     _isLoading = true;
@@ -36,20 +84,29 @@ class ResourceViewModel extends ChangeNotifier {
       final modeStr = prefs.getString('dashboard_mode');
       final isInitiator = modeStr == 'initiator';
 
-      beacon = isInitiator
+      beacon = beacon ?? (isInitiator
           ? NearbyConnectionsInitiator()
-          : NearbyConnectionsJoiner();
+          : NearbyConnectionsJoiner());
 
-      beacon.addListener(_onBeaconStateChanged);
+      repository = _providedRepository ?? 
+          DbResourceRepository(dbService: _dbService, beacon: beacon!);
 
-      await beacon.init();
+      beacon!.addListener(_onBeaconStateChanged);
+
+    
+      await beacon!.init(
+        DeviceRepositoryImpl(_dbService),
+        ClusterRepositoryImpl(_dbService),
+        ClusterMemberRepositoryImpl(_dbService),
+      );
 
       // Initial load from DB
       await _reloadFromDb();
 
       // Listen to resource updates from the model
-      _resourceStreamSubscription =
-          Resource.resourceUpdateStream.listen((updatedResources) {
+      _resourceStreamSubscription = Resource.resourceUpdateStream.listen((
+        updatedResources,
+      ) {
         print('[ResourceViewModel] Resources updated from stream');
         resources = updatedResources;
         notifyListeners();
@@ -79,8 +136,8 @@ class ResourceViewModel extends ChangeNotifier {
   @override
   void dispose() {
     // Clean up listeners
-    beacon.removeListener(_onBeaconStateChanged);
-    _resourceStreamSubscription.cancel();
+    beacon?.removeListener(_onBeaconStateChanged);
+    _resourceStreamSubscription?.cancel();
     super.dispose();
   }
 
@@ -94,45 +151,24 @@ class ResourceViewModel extends ChangeNotifier {
   // ---------- DATA LOADING ----------
 
   Future<List<Resource>> fetchResources() async {
-    final database = await dbService.database;
-    final List<Map<String, dynamic>> maps = await database.query('resources');
-    return List.generate(maps.length, (i) => Resource.fromMap(maps[i]));
+    return await repository.fetchResources();
   }
 
   Future<List<Device>> fetchConnectedDevices() async {
-    final database = await dbService.database;
-    final String deviceUuid = beacon.uuid;
-
-    final joined = await database.query(
-      'cluster_members',
-      columns: ['clusterId'],
-      where: 'deviceUuid = ?',
-      whereArgs: [deviceUuid],
-    );
-
-    if (joined.isEmpty) return [];
-
-    clusterId = joined.first['clusterId'] as String;
-
-    final List<Map<String, dynamic>> maps = await database.query(
-      'devices',
-      where:
-          'uuid IN (SELECT deviceUuid FROM cluster_members WHERE clusterId = ?)',
-      whereArgs: [clusterId],
-    );
-
-    return List.generate(maps.length, (i) => Device.fromMap(maps[i]));
+    return await repository.fetchConnectedDevices();
   }
-
- 
 
   Future<void> postResource(String name, String description) async {
     try {
       _isLoading = true;
       notifyListeners();
 
-      final database = await dbService.database;
-      final String userUuid = beacon.uuid;
+      // Ensure beacon and uuid are initialized
+      if (beacon == null || beacon!.uuid == null) {
+        throw Exception('Beacon service or device UUID not initialized');
+      }
+
+      final String userUuid = beacon!.uuid!;
 
       final newResource = Resource(
         resourceName: name,
@@ -144,16 +180,12 @@ class ResourceViewModel extends ChangeNotifier {
         userUuid: userUuid,
       );
 
-      await database.insert(
-        'resources',
-        newResource.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await repository.insertResource(newResource);
 
       // Broadcast to others in cluster
       for (final device in connectedDevices) {
         if (device.uuid == userUuid) continue;
-        await beacon.sendMessage(
+        await beacon!.sendMessage(
           device.endpointId,
           'RESOURCES',
           {'resources': [newResource.toMap()]},
@@ -174,8 +206,12 @@ class ResourceViewModel extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      final database = await dbService.database;
-      final String userUuid = beacon.uuid;
+      // Ensure beacon and uuid are initialized
+      if (beacon == null || beacon!.uuid == null) {
+        throw Exception('Beacon service or device UUID not initialized');
+      }
+
+      final String userUuid = beacon!.uuid!;
 
       final newResource = Resource(
         resourceName: name,
@@ -187,15 +223,11 @@ class ResourceViewModel extends ChangeNotifier {
         userUuid: userUuid,
       );
 
-      await database.insert(
-        'resources',
-        newResource.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await repository.insertResource(newResource);
 
       for (final device in connectedDevices) {
         if (device.uuid == userUuid) continue;
-        await beacon.sendMessage(
+        await beacon!.sendMessage(
           device.endpointId,
           'RESOURCES',
           {'resources': [newResource.toMap()]},

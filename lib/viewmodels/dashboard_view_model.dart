@@ -1,14 +1,20 @@
+// lib/view_models/dashboard_view_model.dart
 import 'package:flutter/material.dart';
 import 'package:beacon_project/services/nearby_connections/nearby_connections.dart';
-import 'package:beacon_project/services/db_service.dart';
+import 'package:beacon_project/repositories/device_repository.dart';
+import 'package:beacon_project/repositories/cluster_repository.dart';
+import 'package:beacon_project/repositories/cluster_member_repository.dart';
 import 'package:beacon_project/models/device.dart';
 import 'package:beacon_project/models/cluster.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:beacon_project/models/dashboard_mode.dart';
 
 class DashboardViewModel extends ChangeNotifier {
   final DashboardMode mode;
+  final DeviceRepository deviceRepository;
+  final ClusterRepository clusterRepository;
+  final ClusterMemberRepository clusterMemberRepository;
+
   late final NearbyConnectionsBase nearby;
 
   // Initiator state
@@ -18,10 +24,15 @@ class DashboardViewModel extends ChangeNotifier {
 
   // Joiner state
   Cluster? joinedCluster;
-  List<Map<String, String>> discoveredClusters = [];
+  List<Map<String, dynamic>> discoveredClusters = [];
   List<Device> connectedDevicesToCluster = [];
 
-  DashboardViewModel({required this.mode}) {
+  DashboardViewModel({
+    required this.mode,
+    required this.deviceRepository,
+    required this.clusterRepository,
+    required this.clusterMemberRepository,
+  }) {
     _dashboardSetup();
   }
 
@@ -36,8 +47,12 @@ class DashboardViewModel extends ChangeNotifier {
   }
 
   Future<void> initializeNearby() async {
-    await nearby.init();
-    await nearby.startCommunication(); // start advertising and discovering
+    await nearby.init(
+      deviceRepository,
+      clusterRepository,
+      clusterMemberRepository,
+    );
+    await nearby.startCommunication();
 
     if (mode == DashboardMode.joiner) {
       await _loadCurrentClusterJoiner();
@@ -54,7 +69,6 @@ class DashboardViewModel extends ChangeNotifier {
     _onNearbyStateChanged();
   }
 
-  // when notifyListeners is called from nearbyconnection service
   void _onNearbyStateChanged() {
     if (mode == DashboardMode.initiator) {
       _handleInitiatorStateChange();
@@ -80,24 +94,17 @@ class DashboardViewModel extends ChangeNotifier {
   }
 
   // INITIATOR METHODS
-
   Future<void> _loadCurrentClusterInitiator() async {
     print("[DASHBOARD]: loading current cluster");
-    // find cluster owned by me
-    final db = await DBService().database;
-    final results = await db.query("clusters");
     final sp = await SharedPreferences.getInstance();
     final myUuid = sp.getString('device_uuid');
 
-    final myClusters = results
-        .where((map) => map['ownerUuid'] == myUuid)
-        .toList();
-
-    if (myClusters.isNotEmpty) {
-      currentCluster = Cluster.fromMap(myClusters.first);
-    } else {
-      currentCluster = null;
+    if (myUuid != null) {
+      currentCluster = await clusterRepository.getClusterByOwnerUuid(myUuid);
     }
+
+    debugPrint(
+        "[DASHBOARD]: current cluster loaded: ${currentCluster?.name ?? 'none'}");
 
     notifyListeners();
   }
@@ -106,26 +113,30 @@ class DashboardViewModel extends ChangeNotifier {
     print("[DASHBOARD]: loading connected devices");
     if (currentCluster == null) return;
 
-    final db = await DBService().database;
-    final members = await db.query(
-      "cluster_members",
-      where: "clusterId = ? AND deviceUuid != ?",
-      whereArgs: [currentCluster!.clusterId, nearby.uuid],
-    );
-
-    if (members.isEmpty) {
-      connectedDevices = [];
-      notifyListeners();
+    // Ensure uuid is initialized
+    if (nearby.uuid == null) {
+      print('[DASHBOARD] Error: device uuid not initialized');
       return;
     }
 
-    final devicesMaps = await db.query(
-      "devices",
-      where: "uuid IN (${List.filled(members.length, '?').join(',')})",
-      whereArgs: members.map((e) => e["deviceUuid"]).toList(),
+    final members = await clusterMemberRepository.getMembersByClusterId(
+      currentCluster!.clusterId,
     );
 
-    connectedDevices = devicesMaps.map((map) => Device.fromMap(map)).toList();
+    final deviceUuids = members
+        .where((m) => m.deviceUuid != nearby.uuid!)
+        .map((m) => m.deviceUuid)
+        .toList();
+
+    if (deviceUuids.isEmpty) {
+      connectedDevices = [];
+    } else {
+      connectedDevices = await deviceRepository.getDevicesByUuids(deviceUuids);
+    }
+
+    debugPrint(
+        "[DASHBOARD]: connected devices loaded: ${connectedDevices.length}");
+
     notifyListeners();
   }
 
@@ -139,33 +150,20 @@ class DashboardViewModel extends ChangeNotifier {
   }
 
   // JOINER METHODS
-
   Future<void> _loadCurrentClusterJoiner() async {
     print("[DASHBOARD]: loading current cluster");
-
-    // find cluster where i am a member of
-    final db = await DBService().database;
     final sp = await SharedPreferences.getInstance();
     final myUuid = sp.getString('device_uuid');
 
-    final results = await db.query("cluster_members");
-    final myClusters = results
-        .where((map) => map['deviceUuid'] == myUuid)
-        .toList();
-
-    if (myClusters.isNotEmpty) {
-      final clusterId = myClusters.first['clusterId'] as String;
-      final clusterMaps = await db.query(
-        "clusters",
-        where: "clusterId = ?",
-        whereArgs: [clusterId],
+    if (myUuid != null) {
+      final memberships = await clusterMemberRepository.getMembersByDeviceUuid(
+        myUuid,
       );
 
-      if (clusterMaps.isNotEmpty) {
-        joinedCluster = Cluster.fromMap(clusterMaps.first);
+      if (memberships.isNotEmpty) {
+        final clusterId = memberships.first.clusterId;
+        joinedCluster = await clusterRepository.getClusterById(clusterId);
       }
-    } else {
-      joinedCluster = null;
     }
 
     notifyListeners();
@@ -173,37 +171,45 @@ class DashboardViewModel extends ChangeNotifier {
 
   Future<void> _loadConnectedDevicesJoiner() async {
     print("[DASHBOARD]: loading connected devices");
-
     if (joinedCluster == null) {
       connectedDevicesToCluster = [];
       notifyListeners();
       return;
     }
 
-    final db = await DBService().database;
-    final rows = await db.rawQuery(
-      '''
-    SELECT d.*
-    FROM cluster_members cm
-    JOIN devices d ON d.uuid = cm.deviceUuid
-    WHERE cm.clusterId = ?
-      AND cm.deviceUuid != ?
-    ''',
-      [joinedCluster!.clusterId, nearby.uuid],
+    final members = await clusterMemberRepository.getMembersByClusterId(
+      joinedCluster!.clusterId,
     );
 
-    connectedDevicesToCluster = rows.map((m) => Device.fromMap(m)).toList();
+    // Ensure uuid is initialized
+    if (nearby.uuid == null) {
+      print('[DASHBOARD] Error: device uuid not initialized');
+      return;
+    }
+
+    final deviceUuids = members
+        .where((m) => m.deviceUuid != nearby.uuid!)
+        .map((m) => m.deviceUuid)
+        .toList();
+
+    if (deviceUuids.isEmpty) {
+      connectedDevicesToCluster = [];
+    } else {
+      connectedDevicesToCluster = await deviceRepository.getDevicesByUuids(
+        deviceUuids,
+      );
+    }
 
     notifyListeners();
   }
 
-  Future<void> joinCluster(Map<String, String> clusterInfo) async {
+  Future<void> joinCluster(Map<String, dynamic> clusterInfo) async {
     print("[DASHBOARD]: joining cluster");
     final joiner = nearby as NearbyConnectionsJoiner;
     await joiner.joinCluster(
-      clusterInfo["endpointId"]!,
-      clusterInfo["clusterId"]!,
-      clusterInfo["clusterName"]!,
+      clusterInfo["endpointId"] as String,
+      clusterInfo["clusterId"] as String,
+      clusterInfo["clusterName"] as String,
     );
   }
 
@@ -212,12 +218,12 @@ class DashboardViewModel extends ChangeNotifier {
     final joiner = nearby as NearbyConnectionsJoiner;
     await joiner.acceptInvite(endpointId);
 
-    final db = await DBService().database;
     final joinerCluster = joiner.joinedCluster;
     if (joinerCluster != null) {
       joinedCluster = joinerCluster;
       await _loadConnectedDevicesJoiner();
     }
+
     notifyListeners();
   }
 
@@ -237,33 +243,32 @@ class DashboardViewModel extends ChangeNotifier {
   }
 
   // SHARED METHODS
-
   Future<void> printDatabaseContents() async {
-    final db = await DBService().database;
-    final devices = await db.query("devices");
-    final clusters = await db.query("clusters");
-    final members = await db.query("cluster_members");
+    final devices = await deviceRepository.getAllDevices();
+    final clusters = await clusterRepository.getAllClusters();
 
     print("=== DATABASE CONTENTS ===");
     print("\nDevices (${devices.length}):");
     for (var d in devices) {
-      print("  - ${d['deviceName']} (UUID: ${d['uuid']})");
-      print("      Endpoint ID: ${d['endpointId']}");
-      print("      Status: ${d['status']}");
-      print("      In_Range: ${d['inRange']}");
+      print("  - ${d.deviceName} (UUID: ${d.uuid})");
+      print("    Endpoint ID: ${d.endpointId}");
+      print("    Status: ${d.status}");
+      print("    In_Range: ${d.inRange}");
     }
 
     print("\nClusters (${clusters.length}):");
     for (var c in clusters) {
-      print(
-        "  - ${c['name']} (ID: ${c['clusterId']}) owned by ${c['ownerUuid']}",
+      print("  - ${c.name} (ID: ${c.clusterId}) owned by ${c.ownerUuid}");
+
+      final members = await clusterMemberRepository.getMembersByClusterId(
+        c.clusterId,
       );
+      print("  Members: ${members.length}");
+      for (var m in members) {
+        print("    - Device ${m.deviceUuid}");
+      }
     }
 
-    print("\nCluster Members (${members.length}):");
-    for (var m in members) {
-      print("  - Device ${m['deviceUuid']} in Cluster ${m['clusterId']}");
-    }
     print("========================\n");
   }
 
@@ -289,7 +294,6 @@ class DashboardViewModel extends ChangeNotifier {
     if (diff.inHours < 1) return "Active ${diff.inMinutes}m ago";
     if (diff.inHours < 24) return "Active ${diff.inHours}h ago";
     if (diff.inDays < 7) return "Active ${diff.inDays}d ago";
-
     return "last seen ${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')}";
   }
 

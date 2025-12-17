@@ -5,10 +5,13 @@
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 import 'dart:async' as _i4;
 import 'dart:typed_data' as _i6;
-import 'dart:ui' as _i15;
+import 'dart:ui' as _i17;
 
-import 'package:beacon_project/models/device.dart' as _i16;
+import 'package:beacon_project/models/device.dart' as _i18;
 import 'package:beacon_project/models/profile_model.dart' as _i9;
+import 'package:beacon_project/repositories/chat_message_repository.dart'
+    as _i15;
+import 'package:beacon_project/repositories/chat_repository.dart' as _i14;
 import 'package:beacon_project/repositories/cluster_member_repository.dart'
     as _i13;
 import 'package:beacon_project/repositories/cluster_repository.dart' as _i12;
@@ -18,7 +21,7 @@ import 'package:beacon_project/services/nearby_connections/nearby_connections.da
     as _i10;
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:nearby_connections/nearby_connections.dart' as _i3;
-import 'package:nearby_connections/src/classes.dart' as _i14;
+import 'package:nearby_connections/src/classes.dart' as _i16;
 import 'package:nearby_connections/src/defs.dart' as _i5;
 import 'package:shared_preferences/shared_preferences.dart' as _i7;
 import 'package:sqflite_sqlcipher/sqflite.dart' as _i2;
@@ -442,6 +445,19 @@ class MockNearbyConnectionsBase extends _i1.Mock
       );
 
   @override
+  set chatRepository(_i14.ChatRepository? value) => super.noSuchMethod(
+    Invocation.setter(#chatRepository, value),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  set chatMessageRepository(_i15.ChatMessageRepository? value) =>
+      super.noSuchMethod(
+        Invocation.setter(#chatMessageRepository, value),
+        returnValueForMissingStub: null,
+      );
+
+  @override
   set deviceName(String? value) => super.noSuchMethod(
     Invocation.setter(#deviceName, value),
     returnValueForMissingStub: null,
@@ -463,12 +479,16 @@ class MockNearbyConnectionsBase extends _i1.Mock
     _i11.DeviceRepository? deviceRepo,
     _i12.ClusterRepository? clusterRepo,
     _i13.ClusterMemberRepository? clusterMemberRepo,
+    _i14.ChatRepository? chatRepo,
+    _i15.ChatMessageRepository? chatMessageRepo,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#init, [
               deviceRepo,
               clusterRepo,
               clusterMemberRepo,
+              chatRepo,
+              chatMessageRepo,
             ]),
             returnValue: _i4.Future<void>.value(),
             returnValueForMissingStub: _i4.Future<void>.value(),
@@ -484,7 +504,7 @@ class MockNearbyConnectionsBase extends _i1.Mock
           as _i4.Future<bool>);
 
   @override
-  void onPayloadReceived(String? endpointId, _i14.Payload? payload) =>
+  void onPayloadReceived(String? endpointId, _i16.Payload? payload) =>
       super.noSuchMethod(
         Invocation.method(#onPayloadReceived, [endpointId, payload]),
         returnValueForMissingStub: null,
@@ -506,7 +526,7 @@ class MockNearbyConnectionsBase extends _i1.Mock
   @override
   void onPayloadUpdate(
     String? endpointId,
-    _i14.PayloadTransferUpdate? update,
+    _i16.PayloadTransferUpdate? update,
   ) => super.noSuchMethod(
     Invocation.method(#onPayloadUpdate, [endpointId, update]),
     returnValueForMissingStub: null,
@@ -522,6 +542,46 @@ class MockNearbyConnectionsBase extends _i1.Mock
   _i4.Future<void> stopAll() =>
       (super.noSuchMethod(
             Invocation.method(#stopAll, []),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> sendChatMessage(
+    String? endpointId,
+    String? messageId,
+    String? chatId,
+    String? messageText,
+    int? timestamp,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#sendChatMessage, [
+              endpointId,
+              messageId,
+              chatId,
+              messageText,
+              timestamp,
+            ]),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> broadcastChatMessage(
+    String? messageId,
+    String? chatId,
+    String? messageText,
+    int? timestamp,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#broadcastChatMessage, [
+              messageId,
+              chatId,
+              messageText,
+              timestamp,
+            ]),
             returnValue: _i4.Future<void>.value(),
             returnValueForMissingStub: _i4.Future<void>.value(),
           )
@@ -555,13 +615,13 @@ class MockNearbyConnectionsBase extends _i1.Mock
           as _i4.Future<void>);
 
   @override
-  void addListener(_i15.VoidCallback? listener) => super.noSuchMethod(
+  void addListener(_i17.VoidCallback? listener) => super.noSuchMethod(
     Invocation.method(#addListener, [listener]),
     returnValueForMissingStub: null,
   );
 
   @override
-  void removeListener(_i15.VoidCallback? listener) => super.noSuchMethod(
+  void removeListener(_i17.VoidCallback? listener) => super.noSuchMethod(
     Invocation.method(#removeListener, [listener]),
     returnValueForMissingStub: null,
   );
@@ -589,12 +649,12 @@ class MockNearbyConnectionsInitiator extends _i1.Mock
   }
 
   @override
-  List<_i16.Device> get availableDevices =>
+  List<_i18.Device> get availableDevices =>
       (super.noSuchMethod(
             Invocation.getter(#availableDevices),
-            returnValue: <_i16.Device>[],
+            returnValue: <_i18.Device>[],
           )
-          as List<_i16.Device>);
+          as List<_i18.Device>);
 
   @override
   List<String> get connectedEndpoints =>
@@ -628,6 +688,19 @@ class MockNearbyConnectionsInitiator extends _i1.Mock
   set clusterMemberRepository(_i13.ClusterMemberRepository? value) =>
       super.noSuchMethod(
         Invocation.setter(#clusterMemberRepository, value),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  set chatRepository(_i14.ChatRepository? value) => super.noSuchMethod(
+    Invocation.setter(#chatRepository, value),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  set chatMessageRepository(_i15.ChatMessageRepository? value) =>
+      super.noSuchMethod(
+        Invocation.setter(#chatMessageRepository, value),
         returnValueForMissingStub: null,
       );
 
@@ -707,12 +780,16 @@ class MockNearbyConnectionsInitiator extends _i1.Mock
     _i11.DeviceRepository? deviceRepo,
     _i12.ClusterRepository? clusterRepo,
     _i13.ClusterMemberRepository? clusterMemberRepo,
+    _i14.ChatRepository? chatRepo,
+    _i15.ChatMessageRepository? chatMessageRepo,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#init, [
               deviceRepo,
               clusterRepo,
               clusterMemberRepo,
+              chatRepo,
+              chatMessageRepo,
             ]),
             returnValue: _i4.Future<void>.value(),
             returnValueForMissingStub: _i4.Future<void>.value(),
@@ -728,7 +805,7 @@ class MockNearbyConnectionsInitiator extends _i1.Mock
           as _i4.Future<bool>);
 
   @override
-  void onPayloadReceived(String? endpointId, _i14.Payload? payload) =>
+  void onPayloadReceived(String? endpointId, _i16.Payload? payload) =>
       super.noSuchMethod(
         Invocation.method(#onPayloadReceived, [endpointId, payload]),
         returnValueForMissingStub: null,
@@ -750,7 +827,7 @@ class MockNearbyConnectionsInitiator extends _i1.Mock
   @override
   void onPayloadUpdate(
     String? endpointId,
-    _i14.PayloadTransferUpdate? update,
+    _i16.PayloadTransferUpdate? update,
   ) => super.noSuchMethod(
     Invocation.method(#onPayloadUpdate, [endpointId, update]),
     returnValueForMissingStub: null,
@@ -763,13 +840,53 @@ class MockNearbyConnectionsInitiator extends _i1.Mock
   );
 
   @override
-  void addListener(_i15.VoidCallback? listener) => super.noSuchMethod(
+  _i4.Future<void> sendChatMessage(
+    String? endpointId,
+    String? messageId,
+    String? chatId,
+    String? messageText,
+    int? timestamp,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#sendChatMessage, [
+              endpointId,
+              messageId,
+              chatId,
+              messageText,
+              timestamp,
+            ]),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> broadcastChatMessage(
+    String? messageId,
+    String? chatId,
+    String? messageText,
+    int? timestamp,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#broadcastChatMessage, [
+              messageId,
+              chatId,
+              messageText,
+              timestamp,
+            ]),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
+
+  @override
+  void addListener(_i17.VoidCallback? listener) => super.noSuchMethod(
     Invocation.method(#addListener, [listener]),
     returnValueForMissingStub: null,
   );
 
   @override
-  void removeListener(_i15.VoidCallback? listener) => super.noSuchMethod(
+  void removeListener(_i17.VoidCallback? listener) => super.noSuchMethod(
     Invocation.method(#removeListener, [listener]),
     returnValueForMissingStub: null,
   );
@@ -836,6 +953,19 @@ class MockNearbyConnectionsJoiner extends _i1.Mock
   set clusterMemberRepository(_i13.ClusterMemberRepository? value) =>
       super.noSuchMethod(
         Invocation.setter(#clusterMemberRepository, value),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  set chatRepository(_i14.ChatRepository? value) => super.noSuchMethod(
+    Invocation.setter(#chatRepository, value),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  set chatMessageRepository(_i15.ChatMessageRepository? value) =>
+      super.noSuchMethod(
+        Invocation.setter(#chatMessageRepository, value),
         returnValueForMissingStub: null,
       );
 
@@ -938,12 +1068,16 @@ class MockNearbyConnectionsJoiner extends _i1.Mock
     _i11.DeviceRepository? deviceRepo,
     _i12.ClusterRepository? clusterRepo,
     _i13.ClusterMemberRepository? clusterMemberRepo,
+    _i14.ChatRepository? chatRepo,
+    _i15.ChatMessageRepository? chatMessageRepo,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#init, [
               deviceRepo,
               clusterRepo,
               clusterMemberRepo,
+              chatRepo,
+              chatMessageRepo,
             ]),
             returnValue: _i4.Future<void>.value(),
             returnValueForMissingStub: _i4.Future<void>.value(),
@@ -959,7 +1093,7 @@ class MockNearbyConnectionsJoiner extends _i1.Mock
           as _i4.Future<bool>);
 
   @override
-  void onPayloadReceived(String? endpointId, _i14.Payload? payload) =>
+  void onPayloadReceived(String? endpointId, _i16.Payload? payload) =>
       super.noSuchMethod(
         Invocation.method(#onPayloadReceived, [endpointId, payload]),
         returnValueForMissingStub: null,
@@ -981,7 +1115,7 @@ class MockNearbyConnectionsJoiner extends _i1.Mock
   @override
   void onPayloadUpdate(
     String? endpointId,
-    _i14.PayloadTransferUpdate? update,
+    _i16.PayloadTransferUpdate? update,
   ) => super.noSuchMethod(
     Invocation.method(#onPayloadUpdate, [endpointId, update]),
     returnValueForMissingStub: null,
@@ -994,13 +1128,53 @@ class MockNearbyConnectionsJoiner extends _i1.Mock
   );
 
   @override
-  void addListener(_i15.VoidCallback? listener) => super.noSuchMethod(
+  _i4.Future<void> sendChatMessage(
+    String? endpointId,
+    String? messageId,
+    String? chatId,
+    String? messageText,
+    int? timestamp,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#sendChatMessage, [
+              endpointId,
+              messageId,
+              chatId,
+              messageText,
+              timestamp,
+            ]),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> broadcastChatMessage(
+    String? messageId,
+    String? chatId,
+    String? messageText,
+    int? timestamp,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#broadcastChatMessage, [
+              messageId,
+              chatId,
+              messageText,
+              timestamp,
+            ]),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
+
+  @override
+  void addListener(_i17.VoidCallback? listener) => super.noSuchMethod(
     Invocation.method(#addListener, [listener]),
     returnValueForMissingStub: null,
   );
 
   @override
-  void removeListener(_i15.VoidCallback? listener) => super.noSuchMethod(
+  void removeListener(_i17.VoidCallback? listener) => super.noSuchMethod(
     Invocation.method(#removeListener, [listener]),
     returnValueForMissingStub: null,
   );

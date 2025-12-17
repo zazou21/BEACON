@@ -12,6 +12,8 @@ import 'package:beacon_project/models/cluster_member.dart';
 import 'package:beacon_project/repositories/mock/mock_device_repository.dart';
 import 'package:beacon_project/repositories/mock/mock_cluster_repository.dart';
 import 'package:beacon_project/repositories/mock/mock_cluster_member_repository.dart';
+import 'package:beacon_project/repositories/mock/mock_chat_repository.dart';
+import 'package:beacon_project/repositories/mock/mock_chat_message_repository.dart';
 
 import 'mocks.mocks.dart';
 void main() {
@@ -557,6 +559,8 @@ void main() {
         MockDeviceRepository(),
         MockClusterRepository(),
         MockClusterMemberRepository(),
+        MockChatRepository(),
+        MockChatMessageRepository(),  
       );
     });
 
@@ -627,6 +631,9 @@ void main() {
         MockDeviceRepository(),
         MockClusterRepository(),
         MockClusterMemberRepository(),
+        MockChatRepository(),
+        MockChatMessageRepository(), 
+
       );
     });
 

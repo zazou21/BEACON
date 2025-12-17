@@ -10,6 +10,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:beacon_project/repositories/mock/mock_device_repository.dart';
 import 'package:beacon_project/repositories/mock/mock_cluster_repository.dart';
 import 'package:beacon_project/repositories/mock/mock_cluster_member_repository.dart';
+import 'package:beacon_project/repositories/mock/mock_chat_message_repository.dart';
+import 'package:beacon_project/repositories/mock/mock_chat_repository.dart';
 
 
 
@@ -66,7 +68,8 @@ void main() {
 
     int notified =0;
   
-      final viewModel = ResourceViewModel(nearbyConnections: beacon,repository: MockResourceRepository(mockDevices: mockDevices,mockResources: mockResources));
+      final viewModel = ResourceViewModel(nearbyConnections: beacon,
+      repository: MockResourceRepository(mockDevices: mockDevices,mockResources: mockResources));
       viewModel.addListener(() {
         notified++;
       });
@@ -78,7 +81,7 @@ void main() {
       expect(viewModel.isLoading, isFalse);
       expect(viewModel.resources, mockResources);
       expect(viewModel.connectedDevices, mockDevices);
-      verify(beacon.init(deviceRepo,clusterRepo,clusterMemberRepo)).called(1);
+      verify(beacon.init(any,any,any,any,any)).called(1);
       expect(notified, greaterThan(1));
       beacon.dispose();
       

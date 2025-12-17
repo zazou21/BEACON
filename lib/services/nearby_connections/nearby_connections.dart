@@ -5,13 +5,17 @@ import 'package:flutter/foundation.dart';
 import 'package:nearby_connections/nearby_connections.dart';
 import 'package:beacon_project/models/device.dart';
 import 'package:beacon_project/models/cluster.dart';
-import 'package:beacon_project/services/db_service.dart';
-import 'package:sqflite/sqflite.dart';
+import 'package:beacon_project/models/cluster_member.dart';
 import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:beacon_project/services/nearby_connections/payload_strategy_factory.dart';
+import 'package:beacon_project/repositories/device_repository.dart';
+import 'package:beacon_project/repositories/cluster_repository.dart';
+import 'package:beacon_project/repositories/cluster_member_repository.dart';
+import 'package:beacon_project/repositories/chat_repository.dart';
+import 'package:beacon_project/repositories/chat_message_repository.dart';
 
 part 'nearby_connection_initiator.dart';
 part 'nearby_connection_joiner.dart';
@@ -32,29 +36,50 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
   static const STRATEGY = Strategy.P2P_CLUSTER;
   static const SERVICE_ID = "com.beacon.emergency";
 
-  Function(String message)? onTextReceived;
-  Function(Uint8List bytes)? onImageReceived;
-
-  void Function(String endpointId, String message)? onChatMessageReceived;
-  void Function(String endpointId, Uint8List imageBytes)? onChatImageReceived;
+  // Repositories (nullable to allow re-initialization for singletons)
+  DeviceRepository? deviceRepository;
+  ClusterRepository? clusterRepository;
+  ClusterMemberRepository? clusterMemberRepository;
+  ChatRepository? chatRepository;
+  ChatMessageRepository? chatMessageRepository;
 
   // Shared state
   final Map<String, String> _activeConnections = {};
   final List<String> _connectedEndpoints = [];
-
-  late String deviceName;
-  late String uuid;
+  String? deviceName;
+  String? uuid;
 
   // Getters for reactive state
-  List<String> get connectedEndpoints => List.unmodifiable(_connectedEndpoints);
-  Map<String, String> get activeConnections =>
-      Map.unmodifiable(_activeConnections);
+  List<String> get connectedEndpoints => (_connectedEndpoints);
+  Map<String, String> get activeConnections => _activeConnections;
 
-  Future<void> init() async {
+  Future<void> init(
+    DeviceRepository deviceRepo,
+    ClusterRepository clusterRepo,
+    ClusterMemberRepository clusterMemberRepo,
+    ChatRepository chatRepo,
+    ChatMessageRepository chatMessageRepo,
+  ) async {
+    // Assign repositories (allow re-assignment for singleton reuse)
+    deviceRepository = deviceRepo;
+    clusterRepository = clusterRepo;
+    clusterMemberRepository = clusterMemberRepo;
+    chatRepository = chatRepo;
+    chatMessageRepository = chatMessageRepo;
+
+    // Initialize deviceName and uuid
     deviceName = await _getDeviceName();
     uuid = await _getDeviceUUID();
-    PayloadStrategyFactory.initialize(this);
-    notifyListeners();
+
+    // initialize the repositories and pass them to the factory
+    PayloadStrategyFactory.initialize(
+      this,
+      deviceRepository!,
+      clusterRepository!,
+      clusterMemberRepository!,
+      chatRepository!,
+      chatMessageRepository!,
+    );
   }
 
   Future<String> _getDeviceName() async {
@@ -64,17 +89,6 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
     } catch (_) {
       return "unknown";
     }
-  }
-
-  void broadcastMessage(String message) {
-    final strategy = PayloadStrategyFactory.getHandler("BROADCAST");
-    strategy.handle('', {
-      "message": message,
-      "timestamp": DateTime.now().toIso8601String(),
-    });
-
-    // Trigger local callback so UI updates
-    if (onTextReceived != null) onTextReceived!(message);
   }
 
   Future<String> _getDeviceUUID() async {
@@ -92,7 +106,6 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
       Permission.locationWhenInUse,
       Permission.bluetooth,
     ];
-
     if (Platform.isAndroid) {
       final info = await DeviceInfoPlugin().androidInfo;
       int sdkInt = info.version.sdkInt;
@@ -105,31 +118,27 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
       }
       if (sdkInt >= 33) permissions.add(Permission.nearbyWifiDevices);
     }
-
     final statuses = await permissions.request();
     return statuses.values.every((s) => s.isGranted);
   }
 
   void onPayloadReceived(String endpointId, Payload payload) {
+    print("[Nearby]: payload received from $endpointId");
     try {
       if (payload.type == PayloadType.BYTES && payload.bytes != null) {
         final raw = String.fromCharCodes(payload.bytes!);
         final decoded = jsonDecode(raw);
-
         if (decoded is! Map) {
           print("[Nearby] invalid message shape");
           return;
         }
-
         final map = Map<String, dynamic>.from(decoded);
         final type = map["type"];
         final data = map["data"];
-
         if (type == null || data == null || data is! Map) {
           print("[Nearby] missing type/data");
           return;
         }
-
         final handler = PayloadStrategyFactory.getHandler(type);
         handler.handle(endpointId, Map<String, dynamic>.from(data));
       }
@@ -138,12 +147,13 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
     }
   }
 
-  // Convenience wrappers for chat usage:
-  Future<void> sendChatMessage(String endpointId, String text) async {
-    final payload = {
-      "type": "CHAT_MESSAGE",
-      "data": {"text": text},
-    };
+  Future<void> sendMessage(
+    String endpointId,
+    String type,
+    Map<String, dynamic> data,
+  ) async {
+    print("[Nearby]: sending message to $endpointId");
+    final payload = {"type": type, "data": data};
     final jsonBytes = utf8.encode(jsonEncode(payload));
     try {
       await Nearby().sendBytesPayload(
@@ -151,36 +161,25 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
         Uint8List.fromList(jsonBytes),
       );
     } catch (e) {
-      print("[Nearby] sendChatMessage error: $e");
-    }
-  }
-
-  Future<void> sendChatImage(String endpointId, Uint8List bytes) async {
-    // Option A: embed raw list of ints
-    final payload = {
-      "type": "CHAT_IMAGE",
-      "data": {"bytes": bytes.toList()},
-    };
-    final jsonBytes = utf8.encode(jsonEncode(payload));
-    try {
-      await Nearby().sendBytesPayload(
-        endpointId,
-        Uint8List.fromList(jsonBytes),
-      );
-    } catch (e) {
-      print("[Nearby] sendChatImage error: $e");
-    }
-  }
-
-  Future<void> broadcastMessage(String type, Map<String, dynamic> data) async {
-    for (final epId in _connectedEndpoints) {
-      sendChatMessage(epId, jsonEncode({"type": type, "data": data}));
+      print("[Nearby] sendMessage error: $e");
     }
   }
 
   void onPayloadUpdate(String endpointId, PayloadTransferUpdate update) {}
 
+  /// Reset singleton state to allow re-initialization
+  void resetState() {
+    deviceRepository = null;
+    clusterRepository = null;
+    clusterMemberRepository = null;
+    deviceName = null;
+    uuid = null;
+    _connectedEndpoints.clear();
+    _activeConnections.clear();
+  }
+
   Future<void> stopAll() async {
+    print("[Nearby]: stopping all");
     try {
       await Nearby().stopAdvertising();
       await Nearby().stopDiscovery();
@@ -188,10 +187,46 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
     } catch (e) {
       print('[Nearby] stopAll error: $e');
     }
-
     _connectedEndpoints.clear();
     _activeConnections.clear();
     notifyListeners();
+  }
+
+  // Send chat message to specific endpoint
+  Future<void> sendChatMessage(
+    String endpointId,
+    String messageId,
+    String chatId,
+    String messageText,
+    int timestamp,
+  ) async {
+    await sendMessage(endpointId, "CHAT_MESSAGE", {
+      "message_id": messageId,
+      "chat_id": chatId,
+      "sender_uuid": uuid,
+      "message": messageText,
+      "timestamp": timestamp,
+    });
+  }
+
+  // Broadcast chat message to all connected endpoints
+  Future<void> broadcastChatMessage(
+    String messageId,
+    String chatId,
+    String messageText,
+    int timestamp,
+  ) async {
+    final data = {
+      "message_id": messageId,
+      "chat_id": chatId,
+      "sender_uuid": uuid,
+      "message": messageText,
+      "timestamp": timestamp,
+    };
+
+    for (String endpointId in _connectedEndpoints) {
+      await sendMessage(endpointId, "CHAT_MESSAGE", data);
+    }
   }
 
   Future<void> startCommunication();

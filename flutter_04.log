@@ -1,0 +1,107 @@
+Flutter crash report.
+Please report a bug at https://github.com/flutter/flutter/issues.
+
+## command
+
+flutter attach
+
+## exception
+
+StateError: Bad state: Stream has already been listened to.
+
+```
+#0      _StreamController._subscribe (dart:async/stream_controller.dart:695:7)
+#1      _ControllerStream._createSubscription (dart:async/stream_controller.dart:854:20)
+#2      _StreamImpl.listen (dart:async/stream_impl.dart:516:42)
+#3      new _ForwardingStreamSubscription (dart:async/stream_pipe.dart:141:37)
+#4      _ForwardingStream._createSubscription (dart:async/stream_pipe.dart:105:16)
+#5      _ForwardingStream.listen (dart:async/stream_pipe.dart:96:12)
+#6      FlutterDevice.connect (package:flutter_tools/src/resident_runner.dart:244:35)
+#7      ResidentRunner.connectToServiceProtocol (package:flutter_tools/src/resident_runner.dart:1309:21)
+#8      HotRunner._attach (package:flutter_tools/src/run_hot.dart:255:13)
+#9      HotRunner.attach (package:flutter_tools/src/run_hot.dart:240:12)
+#10     AttachCommand._attachToDevice (package:flutter_tools/src/commands/attach.dart:414:31)
+<asynchronous suspension>
+#11     AttachCommand.runCommand (package:flutter_tools/src/commands/attach.dart:262:5)
+<asynchronous suspension>
+#12     FlutterCommand.run.<anonymous closure> (package:flutter_tools/src/runner/flutter_command.dart:1581:27)
+<asynchronous suspension>
+#13     AppContext.run.<anonymous closure> (package:flutter_tools/src/base/context.dart:154:19)
+<asynchronous suspension>
+#14     CommandRunner.runCommand (package:args/command_runner.dart:212:13)
+<asynchronous suspension>
+#15     FlutterCommandRunner.runCommand.<anonymous closure> (package:flutter_tools/src/runner/flutter_command_runner.dart:503:9)
+<asynchronous suspension>
+#16     AppContext.run.<anonymous closure> (package:flutter_tools/src/base/context.dart:154:19)
+<asynchronous suspension>
+#17     FlutterCommandRunner.runCommand (package:flutter_tools/src/runner/flutter_command_runner.dart:438:5)
+<asynchronous suspension>
+#18     run.<anonymous closure>.<anonymous closure> (package:flutter_tools/runner.dart:98:11)
+<asynchronous suspension>
+#19     AppContext.run.<anonymous closure> (package:flutter_tools/src/base/context.dart:154:19)
+<asynchronous suspension>
+#20     main (package:flutter_tools/executable.dart:101:3)
+<asynchronous suspension>
+```
+
+## flutter doctor
+
+```
+[32m[✓][39m Flutter (Channel stable, 3.35.4, on Microsoft Windows [Version 10.0.26100.7171], locale en-US) [438ms]
+    [32m•[39m Flutter version 3.35.4 on channel stable at D:\Flutter SDK\flutter
+    [32m•[39m Upstream repository https://github.com/flutter/flutter.git
+    [32m•[39m Framework revision d693b4b9db (2 months ago), 2025-09-16 14:27:41 +0000
+    [32m•[39m Engine revision c298091351
+    [32m•[39m Dart version 3.9.2
+    [32m•[39m DevTools version 2.48.0
+    [32m•[39m Feature flags: enable-web, enable-linux-desktop, enable-macos-desktop, enable-windows-desktop, enable-android, enable-ios,
+      cli-animations, enable-lldb-debugging
+
+[32m[✓][39m Windows Version (11 Home Single Language 64-bit, 24H2, 2009) [7.7s]
+
+[33m[!][39m Android toolchain - develop for Android devices (Android SDK version 35.0.0) [2.0s]
+    [32m•[39m Android SDK at C:\Users\ezzel\AppData\Local\Android\sdk
+    [32m•[39m Emulator version 35.2.10.0 (build_id 12414864) (CL:N/A)
+    [31m✗[39m cmdline-tools component is missing.
+      Try installing or updating Android Studio.
+      Alternatively, download the tools from https://developer.android.com/studio#command-line-tools-only and make sure to set the
+      ANDROID_HOME environment variable.
+      See https://developer.android.com/studio/command-line for more details.
+    [31m✗[39m Android license status unknown.
+      Run `flutter doctor --android-licenses` to accept the SDK licenses.
+      See https://flutter.dev/to/windows-android-setup for more details.
+
+[32m[✓][39m Chrome - develop for the web [141ms]
+    [32m•[39m Chrome at C:\Program Files\Google\Chrome\Application\chrome.exe
+
+[32m[✓][39m Visual Studio - develop Windows apps (Visual Studio Community 2022 17.3.5) [140ms]
+    [32m•[39m Visual Studio at C:\Program Files\Microsoft Visual Studio\2022\Community
+    [32m•[39m Visual Studio Community 2022 version 17.3.32922.545
+    [32m•[39m Windows 10 SDK version 10.0.19041.0
+
+[32m[✓][39m Android Studio (version 2024.2) [7ms]
+    [32m•[39m Android Studio at C:\Program Files\Android\Android Studio
+    [32m•[39m Flutter plugin can be installed from:
+      🔨 https://plugins.jetbrains.com/plugin/9212-flutter
+    [32m•[39m Dart plugin can be installed from:
+      🔨 https://plugins.jetbrains.com/plugin/6351-dart
+    [32m•[39m Java version OpenJDK Runtime Environment (build 21.0.3+-12282718-b509.11)
+
+[32m[✓][39m VS Code (version 1.106.2) [5ms]
+    [32m•[39m VS Code at C:\Users\ezzel\AppData\Local\Programs\Microsoft VS Code
+    [32m•[39m Flutter extension version 3.122.0
+
+[32m[✓][39m Connected device (4 available) [440ms]
+    [32m•[39m SM A720F (mobile) • 52108ee3468ec3b5 • android-arm64  • Android 8.0.0 (API 26)
+    [32m•[39m Windows (desktop) • windows          • windows-x64    • Microsoft Windows [Version 10.0.26100.7171]
+    [32m•[39m Chrome (web)      • chrome           • web-javascript • Google Chrome 142.0.7444.176
+    [32m•[39m Edge (web)        • edge             • web-javascript • Microsoft Edge 142.0.3595.94
+
+[33m[!][39m Network resources [21.1s]
+    [31m✗[39m A network error occurred while checking "https://pub.dev/": The semaphore timeout period has expired.
+
+    [31m✗[39m A network error occurred while checking "https://maven.google.com/": The semaphore timeout period has expired.
+
+
+[33m![39m Doctor found issues in 2 categories.
+```

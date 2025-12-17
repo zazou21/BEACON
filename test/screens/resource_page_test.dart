@@ -1,3 +1,7 @@
+import 'package:beacon_project/models/device.dart';
+import 'package:beacon_project/repositories/cluster_member_repository.dart';
+import 'package:beacon_project/repositories/cluster_repository.dart';
+import 'package:beacon_project/repositories/device_repository.dart';
 import 'package:beacon_project/viewmodels/resource_viewmodel.dart';
 import 'package:beacon_project/models/resource.dart';
 import 'package:beacon_project/screens/resources_page.dart';
@@ -7,17 +11,29 @@ import 'package:flutter_test/flutter_test.dart';
 import '../mocks.mocks.dart';
 import 'package:mockito/mockito.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:beacon_project/repositories/mock/mock_device_repository.dart';
+import 'package:beacon_project/repositories/mock/mock_cluster_repository.dart';
+import 'package:beacon_project/repositories/mock/mock_cluster_member_repository.dart';
+
 
 void main() {
   late MockNearbyConnectionsBase beacon;
   late MockResourceRepository repo;
   late ResourceViewModel vm;
+  late DeviceRepository deviceRepo;
+  late ClusterRepository clusterRepo;
+  late ClusterMemberRepository clusterMemberRepo;
+
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({'dashboard_mode': 'initiator'});
+    deviceRepo= MockDeviceRepository();
+    clusterRepo= MockClusterRepository();
+    clusterMemberRepo= MockClusterMemberRepository();
+
     
     beacon = MockNearbyConnectionsBase();
-    when(beacon.init()).thenAnswer((_) async {});
+    when(beacon.init(deviceRepo,clusterRepo,clusterMemberRepo)).thenAnswer((_) async {});
     when(beacon.uuid).thenReturn('uuid');
     when(beacon.deviceName).thenReturn('device');
     when(beacon.addListener(any)).thenReturn(null);

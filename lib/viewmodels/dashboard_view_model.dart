@@ -1,4 +1,5 @@
 // lib/view_models/dashboard_view_model.dart
+import 'package:beacon_project/models/chat_message.dart';
 import 'package:flutter/material.dart';
 import 'package:beacon_project/services/nearby_connections/nearby_connections.dart';
 import 'package:beacon_project/repositories/device_repository.dart';
@@ -349,7 +350,16 @@ class DashboardViewModel extends ChangeNotifier {
         messageText,
         timestamp,
       );
-
+    await chatMessageRepository.insertMessage(
+        ChatMessage(
+          id: messageId,
+          chatId: chatId,
+          senderUuid: myUuid,
+          messageText: messageText,
+          timestamp: timestamp,
+        ),
+      );
+    
       print('[DashboardViewModel] Sent quick message to ${device.deviceName}');
     } catch (e) {
       print('[DashboardViewModel] Error sending quick message: $e');

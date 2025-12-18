@@ -104,7 +104,11 @@ class ChatViewModel extends ChangeNotifier {
       }
 
       // Load messages
-      await refreshMessages();
+      // await refreshMessages();
+      _messages = await _chatMessageRepository.getMessagesByChatId(
+        _chat!.id,
+      );
+
 
       // Start periodic refresh for messages only
       _startMessageRefresh();

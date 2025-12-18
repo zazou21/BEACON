@@ -200,6 +200,7 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
     String messageText,
     int timestamp,
   ) async {
+    debugPrint("[Nearby]: sending chat message to $endpointId");
     await sendMessage(endpointId, "CHAT_MESSAGE", {
       "message_id": messageId,
       "chat_id": chatId,

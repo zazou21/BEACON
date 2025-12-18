@@ -4,6 +4,7 @@ import '../models/resource.dart';
 import '../models/device.dart';
 import '../viewmodels/resource_viewmodel.dart';
 import 'package:beacon_project/services/text_to_speech.dart';
+import 'package:beacon_project/screens/chat_page.dart';
 
 // Optional: control tab order explicitly
 const List<ResourceType> resourceTabOrder = [
@@ -120,7 +121,7 @@ class ResourcePage extends StatelessWidget {
                                   _showResourceDetails(
                                     context,
                                     resource,
-                                    viewModel.connectedDevices,
+                                    viewModel
                                   );
                                 },
                                 selected: viewModel.selectedTab,
@@ -140,9 +141,9 @@ class ResourcePage extends StatelessWidget {
   void _showResourceDetails(
     BuildContext context,
     Resource resource,
-    List<Device> connectedDevices,
+    ResourceViewModel? viewModel,
   ) {
-    final Device? owner = connectedDevices.firstWhere(
+    final Device owner = viewModel!.connectedDevices.firstWhere(
       (d) => d.uuid == resource.userUuid,
       orElse: () => Device(
         uuid: resource.userUuid,
@@ -235,7 +236,25 @@ class ResourcePage extends StatelessWidget {
               // Chat button
               Center(
                 child: ElevatedButton.icon(
-                  onPressed: () {}, // not implemented yet
+                  onPressed: () {
+                    if (owner.uuid == viewModel!.beacon!.uuid) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Cannot chat with yourself.'),
+                        ),
+                      );
+                      return;
+                    }
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ChatPage(
+                          deviceUuid: owner.uuid,
+                          nearby:viewModel!.beacon!,
+                        ),
+                      ),
+                    );
+                  }, 
                   icon: const Icon(Icons.chat),
                   label: const Text("Open Chat"),
                   style: ElevatedButton.styleFrom(

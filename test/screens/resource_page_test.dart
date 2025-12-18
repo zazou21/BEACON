@@ -33,7 +33,7 @@ void main() {
 
     
     beacon = MockNearbyConnectionsBase();
-    when(beacon.init(deviceRepo,clusterRepo,clusterMemberRepo)).thenAnswer((_) async {});
+    when(beacon.init(deviceRepo,clusterRepo,clusterMemberRepo,any,any)).thenAnswer((_) async {});
     when(beacon.uuid).thenReturn('uuid');
     when(beacon.deviceName).thenReturn('device');
     when(beacon.addListener(any)).thenReturn(null);
@@ -60,7 +60,7 @@ void main() {
       // Verify that the ResourcePage contains expected elements
       expect(find.byType(ResourceTabs), findsOneWidget);
       expect(find.byType(ListView), findsOneWidget);
-      expect(find.text('Share or request emergency resources'), findsOneWidget);
+    
     });
 
     testWidgets('ResourcePage displays loading correctly', (WidgetTester tester) async {

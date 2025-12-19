@@ -1,11 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../repositories/profile_repository.dart';
+import '../repositories/profile_repository_impl.dart';
 import '../services/db_service.dart';
 import '../models/profile_model.dart';
+import '../viewmodels/profile_view_model.dart';
 
 class UserProfilePage extends StatefulWidget {
   final bool isFirstTime; // true when coming from splash
-  const UserProfilePage({super.key, this.isFirstTime = false});
+  final ProfileRepository? profileRepository;
+
+  const UserProfilePage({
+    super.key,
+    this.isFirstTime = false,
+    this.profileRepository,
+  });
 
   @override
   State<UserProfilePage> createState() => _UserProfilePageState();
@@ -23,30 +32,31 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   bool _isSaved = false;
   Map<String, String> _savedData = {};
+  late ProfileViewModel _viewModel;
 
   @override
   void initState() {
     super.initState();
+    // Create view model with injected or default repository
+    final repository = widget.profileRepository ??
+        ProfileRepositoryImpl(DBService());
+    _viewModel = ProfileViewModel(repository);
     _loadProfile();
   }
 
   Future<void> _loadProfile() async {
-    final profile = await DBService().getProfile();
-    if (profile != null) {
+    await _viewModel.loadProfile();
+    // Populate form fields with loaded data
+    if (_viewModel.currentProfile != null) {
+      final profile = _viewModel.currentProfile!;
       _fullNameController.text = profile.fullName;
       _phoneController.text = profile.phone;
       _emergencyNameController.text = profile.emergencyName;
       _emergencyPhoneController.text = profile.emergencyPhone;
       _locationController.text = profile.location ?? '';
       setState(() {
-        _isSaved = true;
-        _savedData = {
-          "Full Name": profile.fullName,
-          "Phone Number": profile.phone,
-          "Emergency Contact Name": profile.emergencyName,
-          "Emergency Contact Number": profile.emergencyPhone,
-          "Location": profile.location ?? "Not Provided",
-        };
+        _isSaved = _viewModel.isSaved;
+        _savedData = _viewModel.savedData;
       });
     }
   }
@@ -58,6 +68,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     _emergencyNameController.clear();
     _emergencyPhoneController.clear();
     _locationController.clear();
+    _viewModel.resetForm();
     setState(() {
       _isSaved = false;
       _savedData = {};
@@ -79,7 +90,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
         updatedAt: DateTime.now().millisecondsSinceEpoch,
       );
 
-      await DBService().insertProfile(profile);
+      await _viewModel.saveProfile(profile);
 
       setState(() {
         _isSaved = true;

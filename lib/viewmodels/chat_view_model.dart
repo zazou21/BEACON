@@ -1,10 +1,15 @@
+import 'package:beacon_project/repositories/chat_repository_impl.dart';
 import 'package:flutter/foundation.dart';
 import 'package:beacon_project/models/chat.dart';
 import 'package:beacon_project/models/chat_message.dart';
 import 'package:beacon_project/models/device.dart';
+import 'package:beacon_project/models/cluster.dart';
+import 'package:beacon_project/models/cluster_member.dart';
 import 'package:beacon_project/repositories/chat_repository.dart';
 import 'package:beacon_project/repositories/chat_message_repository.dart';
 import 'package:beacon_project/repositories/device_repository.dart';
+import 'package:beacon_project/repositories/cluster_repository.dart';
+import 'package:beacon_project/repositories/cluster_member_repository.dart';
 import 'package:beacon_project/services/nearby_connections/nearby_connections.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -14,12 +19,20 @@ class ChatViewModel extends ChangeNotifier {
   final ChatRepository _chatRepository;
   final ChatMessageRepository _chatMessageRepository;
   final DeviceRepository _deviceRepository;
+  final ClusterRepository _clusterRepository;
+  final ClusterMemberRepository _clusterMemberRepository;
   final NearbyConnectionsBase _nearby;
-  final String _deviceUuid;
+
+  final String? _deviceUuid;
+  final String? _clusterId;
+  final bool isGroupChat;
 
   Chat? _chat;
   Device? _device;
+  Cluster? _cluster;
   List<ChatMessage> _messages = [];
+  List<ClusterMember> _clusterMembers = [];
+  Map<String, Device> _memberDevices = {};
   bool _isLoading = false;
   String? _myUuid;
   StreamSubscription? _messageRefreshSubscription;
@@ -28,34 +41,46 @@ class ChatViewModel extends ChangeNotifier {
     required ChatRepository chatRepository,
     required ChatMessageRepository chatMessageRepository,
     required DeviceRepository deviceRepository,
+    required ClusterRepository clusterRepository,
+    required ClusterMemberRepository clusterMemberRepository,
     required NearbyConnectionsBase nearby,
-    required String deviceUuid,
+    String? deviceUuid,
+    String? clusterId,
+    this.isGroupChat = false,
   }) : _chatRepository = chatRepository,
        _chatMessageRepository = chatMessageRepository,
        _deviceRepository = deviceRepository,
+       _clusterRepository = clusterRepository,
+       _clusterMemberRepository = clusterMemberRepository,
        _nearby = nearby,
-       _deviceUuid = deviceUuid {
+       _deviceUuid = deviceUuid,
+       _clusterId = clusterId {
     _initialize();
-    // Listen to nearby connection state changes
     _nearby.addListener(_onNearbyStateChanged);
   }
 
   Chat? get chat => _chat;
   Device? get device => _device;
+  Cluster? get cluster => _cluster;
   List<ChatMessage> get messages => _messages;
   bool get isLoading => _isLoading;
   String? get myUuid => _myUuid;
+  int get clusterMemberCount => _clusterMembers.length;
 
   void _onNearbyStateChanged() {
-    // Refresh device status and messages when nearby state changes
-    _refreshDeviceStatus();
+    if (!isGroupChat) {
+      _refreshDeviceStatus();
+    } else {
+      _refreshClusterMembers();
+    }
     refreshMessages();
   }
 
   Future<void> _refreshDeviceStatus() async {
+    if (_deviceUuid == null) return;
     try {
       final updatedDevice = await _deviceRepository.getDeviceByUuid(
-        _deviceUuid,
+        _deviceUuid!,
       );
       if (updatedDevice != null) {
         _device = updatedDevice;
@@ -63,6 +88,30 @@ class ChatViewModel extends ChangeNotifier {
       }
     } catch (e) {
       print("[ChatViewModel] Error refreshing device status: $e");
+    }
+  }
+
+  Future<void> _refreshClusterMembers() async {
+    if (_clusterId == null) return;
+    try {
+      _clusterMembers = await _clusterMemberRepository.getMembersByClusterId(
+        _clusterId!,
+      );
+
+      // Load device info for all members
+      for (var member in _clusterMembers) {
+        if (!_memberDevices.containsKey(member.deviceUuid)) {
+          final device = await _deviceRepository.getDeviceByUuid(
+            member.deviceUuid,
+          );
+          if (device != null) {
+            _memberDevices[member.deviceUuid] = device;
+          }
+        }
+      }
+      notifyListeners();
+    } catch (e) {
+      print("[ChatViewModel] Error refreshing cluster members: $e");
     }
   }
 
@@ -81,36 +130,15 @@ class ChatViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Get my UUID from SharedPreferences
       _myUuid = await _getDeviceUUID();
 
-      // Load device info
-      _device = await _deviceRepository.getDeviceByUuid(_deviceUuid);
-
-      if (_device == null) {
-        print("[ChatViewModel] Device not found");
-        return;
+      if (isGroupChat) {
+        await _initializeGroupChat();
+      } else {
+        await _initializePrivateChat();
       }
 
-      // Generate chat ID (same for both users)
-      String chatId = _generateChatId(_myUuid!, _deviceUuid);
-
-      // Get or create chat
-      _chat = await _chatRepository.getChatById(chatId);
-
-      if (_chat == null) {
-        _chat = Chat(id: chatId, deviceUuid: _deviceUuid);
-        await _chatRepository.insertChat(_chat!);
-      }
-
-      // Load messages
-      // await refreshMessages();
-      _messages = await _chatMessageRepository.getMessagesByChatId(
-        _chat!.id,
-      );
-
-
-      // Start periodic refresh for messages only
+      _messages = await _chatMessageRepository.getMessagesByChatId(_chat!.id);
       _startMessageRefresh();
     } catch (e) {
       print("[ChatViewModel] Error initializing: $e");
@@ -120,31 +148,78 @@ class ChatViewModel extends ChangeNotifier {
     }
   }
 
+  Future<void> _initializeGroupChat() async {
+    if (_clusterId == null) {
+      print("[ChatViewModel] Cluster ID is null for group chat");
+      return;
+    }
+
+    // Load cluster info
+    _cluster = await _clusterRepository.getClusterById(_clusterId!);
+    if (_cluster == null) {
+      print("[ChatViewModel] Cluster not found");
+      return;
+    }
+
+    // Load cluster members
+    await _refreshClusterMembers();
+
+    // Get or create group chat
+    final chatRepository = _chatRepository as ChatRepositoryImpl;
+    _chat = await chatRepository.getChatByClusterId(_clusterId!);
+
+    if (_chat == null) {
+      _chat = Chat(
+        id: 'group_$_clusterId',
+        clusterId: _clusterId,
+        isGroupChat: true,
+      );
+      await _chatRepository.insertChat(_chat!);
+    }
+  }
+
+  Future<void> _initializePrivateChat() async {
+    if (_deviceUuid == null) {
+      print("[ChatViewModel] Device UUID is null for private chat");
+      return;
+    }
+
+    // Load device info
+    _device = await _deviceRepository.getDeviceByUuid(_deviceUuid!);
+    if (_device == null) {
+      print("[ChatViewModel] Device not found");
+      return;
+    }
+
+    // Generate chat ID (same for both users)
+    String chatId = _generateChatId(_myUuid!, _deviceUuid!);
+
+    // Get or create chat
+    _chat = await _chatRepository.getChatById(chatId);
+    if (_chat == null) {
+      _chat = Chat(id: chatId, deviceUuid: _deviceUuid, isGroupChat: false);
+      await _chatRepository.insertChat(_chat!);
+    }
+  }
+
   void _startMessageRefresh() {
-    // Refresh messages every 2 seconds to catch incoming messages
     _messageRefreshSubscription = Stream.periodic(
       const Duration(seconds: 2),
     ).listen((_) => refreshMessages());
   }
 
-  // Generate same chat ID for both users
   String _generateChatId(String uuid1, String uuid2) {
     List<String> uuids = [uuid1, uuid2];
-    uuids.sort(); // Sort to ensure same order
+    uuids.sort();
     return '${uuids[0]}_${uuids[1]}';
   }
 
   Future<void> sendMessage(String messageText) async {
-    if (_chat == null ||
-        _device == null ||
-        messageText.trim().isEmpty ||
-        _myUuid == null)
-      return;
+    if (_chat == null || messageText.trim().isEmpty || _myUuid == null) return;
 
     final messageId = const Uuid().v4();
     final timestamp = DateTime.now().millisecondsSinceEpoch;
 
-    // Create message
     final message = ChatMessage(
       id: messageId,
       chatId: _chat!.id,
@@ -158,20 +233,32 @@ class ChatViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Send via Nearby Connections
-      await _nearby.sendChatMessage(
-        _device!.endpointId,
-        messageId,
-        _chat!.id,
-        messageText.trim(),
-        timestamp,
-      );
+      if (isGroupChat) {
+        // Send to all cluster members via broadcast
+        await _nearby.broadcastChatMessage(
+          messageId,
+          _chat!.id,
+          messageText.trim(),
+          timestamp,
+        );
+      } else {
+        // Send to specific device
+        if (_device == null) {
+          throw Exception("Device not found for private message");
+        }
+        await _nearby.sendChatMessage(
+          _device!.endpointId,
+          messageId,
+          _chat!.id,
+          messageText.trim(),
+          timestamp,
+        );
+      }
 
       // Save to database
       await _chatMessageRepository.insertMessage(message);
     } catch (e) {
       print("[ChatViewModel] Error sending message: $e");
-      // Remove failed message
       _messages.removeLast();
       notifyListeners();
     }
@@ -193,6 +280,12 @@ class ChatViewModel extends ChangeNotifier {
     }
   }
 
+  String getSenderName(String senderUuid) {
+    if (senderUuid == _myUuid) return 'You';
+    final device = _memberDevices[senderUuid];
+    return device?.deviceName ?? 'Unknown';
+  }
+
   String formatTimestamp(int timestamp) {
     final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
     final now = DateTime.now();
@@ -208,10 +301,7 @@ class ChatViewModel extends ChangeNotifier {
 
   String getLastSeenText() {
     if (_device == null) return '';
-
-    if (_device!.isOnline) {
-      return 'Online';
-    }
+    if (_device!.isOnline) return 'Online';
 
     final now = DateTime.now();
     final diff = now.difference(_device!.lastSeen);

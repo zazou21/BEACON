@@ -99,12 +99,19 @@ class DBService {
         """);
 
         await db.execute("""
-              CREATE TABLE  chat (
-          id TEXT PRIMARY KEY,
-          device_uuid TEXT NOT NULL,
-          created_at TEXT NOT NULL,
-          FOREIGN KEY (device_uuid) REFERENCES device(uuid) ON DELETE CASCADE
-        );
+            CREATE TABLE chat (
+              id TEXT PRIMARY KEY,
+              device_uuid TEXT,
+              cluster_id TEXT,
+              is_group_chat INTEGER DEFAULT 0,
+              created_at TEXT NOT NULL,
+              FOREIGN KEY (device_uuid) REFERENCES device(uuid) ON DELETE CASCADE,
+              FOREIGN KEY (cluster_id) REFERENCES clusters(clusterId) ON DELETE CASCADE,
+              CHECK (
+                (device_uuid IS NOT NULL AND cluster_id IS NULL AND is_group_chat = 0) OR
+                (device_uuid IS NULL AND cluster_id IS NOT NULL AND is_group_chat = 1)
+              )
+            );
         """);
         await db.execute("""
           CREATE TABLE chat_message (

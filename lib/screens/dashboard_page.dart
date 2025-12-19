@@ -260,19 +260,14 @@ class _DashboardPageState extends State<DashboardPage> {
       icon: const Icon(Icons.more_vert),
       onSelected: (value) {
         if (value == 'chat') {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) =>
-                  ChatPage(deviceUuid: device.uuid, nearby: _viewModel.nearby),
-            ),
-          );
+          // USE THE NEW NAVIGATION METHOD
+          _viewModel.navigateToPrivateChat(context, device.uuid);
         } else if (value == 'quick_message') {
           _showQuickMessageDialog(device);
         }
       },
       itemBuilder: (_) => const [
-        PopupMenuItem(value: 'chat', child: Text('Chat')),
+        PopupMenuItem(value: 'chat', child: Text('Private Chat')),
         PopupMenuItem(
           value: 'quick_message',
           child: Text('Send Quick Message'),
@@ -325,7 +320,7 @@ class _DashboardPageState extends State<DashboardPage> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(dialogContext, true), // Return true
+            onPressed: () => Navigator.pop(dialogContext, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text(
               'Disconnect',
@@ -394,7 +389,6 @@ class _DashboardPageState extends State<DashboardPage> {
         ],
       ),
     ).whenComplete(() {
-      // Dispose controller after dialog animation completes
       broadcastController.dispose();
     });
   }
@@ -511,23 +505,31 @@ class _DashboardPageState extends State<DashboardPage> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
-                          //broadcast button
+                          // GROUP CHAT BUTTON - USES NEW NAVIGATION
                           ElevatedButton.icon(
-                            onPressed: () => _showBroadcastDialog(),
-                            icon: const Icon(Icons.campaign),
-                            label: const Text('Broadcast'),
+                            onPressed: () => viewModel.navigateToGroupChat(
+                              context,
+                              viewModel.currentCluster!.clusterId,
+                            ),
+                            icon: const Icon(Icons.group),
+                            label: const Text('Group Chat'),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
+                              backgroundColor: const Color.fromARGB(
+                                255,
+                                10,
+                                51,
+                                85,
+                              ),
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 24,
+                                horizontal: 20,
                                 vertical: 12,
                               ),
                             ),
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(width: 8),
 
-                          //disconnect button
+                          // DISCONNECT BUTTON
                           ElevatedButton.icon(
                             onPressed: () async {
                               await _showDisconnectConfirmation(
@@ -539,10 +541,9 @@ class _DashboardPageState extends State<DashboardPage> {
                             label: Text('Disconnect'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.red,
-
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 24,
+                                horizontal: 20,
                                 vertical: 12,
                               ),
                             ),
@@ -656,13 +657,18 @@ class _DashboardPageState extends State<DashboardPage> {
                                     ),
                                   ),
                                 ),
+                                // GROUP CHAT BUTTON - USES NEW NAVIGATION
                                 IconButton(
                                   icon: const Icon(
-                                    Icons.campaign,
-                                    color: Colors.blueAccent,
+                                    Icons.group,
+                                    color: Color.fromARGB(255, 10, 51, 85),
                                   ),
-                                  onPressed: () => _showBroadcastDialog(),
-                                  tooltip: "Broadcast",
+                                  onPressed: () =>
+                                      viewModel.navigateToGroupChat(
+                                        context,
+                                        viewModel.joinedCluster!.clusterId,
+                                      ),
+                                  tooltip: "Group Chat",
                                 ),
                                 IconButton(
                                   icon: const Icon(

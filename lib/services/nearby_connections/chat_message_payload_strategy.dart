@@ -4,46 +4,47 @@ import 'package:beacon_project/repositories/chat_repository.dart';
 import 'package:beacon_project/repositories/chat_message_repository.dart';
 import 'package:beacon_project/models/chat.dart';
 import 'package:beacon_project/models/chat_message.dart';
+import 'package:beacon_project/services/notification_service.dart';
 
 class ChatMessagePayloadStrategy implements PayloadStrategy {
-  final NearbyConnectionsBase _beacon;
-  final ChatRepository _chatRepository;
-  final ChatMessageRepository _chatMessageRepository;
+  final NearbyConnectionsBase beacon;
+  final ChatRepository chatRepository;
+  final ChatMessageRepository chatMessageRepository;
+  final NotificationService _notificationService = NotificationService();
 
   ChatMessagePayloadStrategy(
-    this._beacon,
-    this._chatRepository,
-    this._chatMessageRepository,
+    this.beacon,
+    this.chatRepository,
+    this.chatMessageRepository,
   );
 
   @override
   Future<void> handle(String endpointId, Map<String, dynamic> data) async {
-    print("[ChatMessage] Received from $endpointId: $data");
+    print('ChatMessage: Received from $endpointId: $data');
 
-    final messageId = data["message_id"] as String?;
-    final chatId = data["chat_id"] as String?;
-    final senderUuid = data["sender_uuid"] as String?;
-    final messageText = data["message"] as String?;
-    final timestamp = data["timestamp"] as int?;
+    final messageId = data['messageid'] as String?;
+    final chatId = data['chatid'] as String?;
+    final senderUuid = data['senderuuid'] as String?;
+    final messageText = data['message'] as String?;
+    final timestamp = data['timestamp'] as int?;
 
     if (messageId == null ||
         chatId == null ||
         senderUuid == null ||
         messageText == null ||
         timestamp == null) {
-      print("[ChatMessage] Invalid payload data");
+      print('ChatMessage: Invalid payload data');
       return;
     }
 
     // Get or create chat
-    Chat? chat = await _chatRepository.getChatById(chatId);
-
+    Chat? chat = await chatRepository.getChatById(chatId);
     if (chat == null) {
       chat = Chat(id: chatId, deviceUuid: senderUuid);
-      await _chatRepository.insertChat(chat);
+      await chatRepository.insertChat(chat);
     }
 
-    // Insert message (using same UUID from sender)
+    // Insert message
     final message = ChatMessage(
       id: messageId,
       chatId: chatId,
@@ -51,9 +52,18 @@ class ChatMessagePayloadStrategy implements PayloadStrategy {
       messageText: messageText,
       timestamp: timestamp,
     );
+    await chatMessageRepository.insertMessage(message);
+    print('ChatMessage: Message saved to database');
 
-    await _chatMessageRepository.insertMessage(message);
+    // Get device info for notification
+    final device = await beacon.deviceRepository?.getDeviceByUuid(senderUuid);
+    final deviceName = device?.deviceName ?? 'Unknown Device';
 
-    print("[ChatMessage] Message saved to database");
+    // Show notification
+    await _notificationService.showChatNotification(
+      deviceUuid: senderUuid,
+      deviceName: deviceName,
+      message: messageText,
+    );
   }
 }

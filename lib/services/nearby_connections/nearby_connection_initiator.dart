@@ -25,8 +25,8 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
     if (!await requestNearbyPermissions()) return;
 
     // Ensure repositories are initialized
-    if (clusterRepository == null || 
-        clusterMemberRepository == null || 
+    if (clusterRepository == null ||
+        clusterMemberRepository == null ||
         deviceRepository == null ||
         uuid == null ||
         deviceName == null) {
@@ -34,7 +34,9 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
       return;
     }
 
-    final existingCluster = await clusterRepository!.getClusterByOwnerUuid(uuid!);
+    final existingCluster = await clusterRepository!.getClusterByOwnerUuid(
+      uuid!,
+    );
 
     if (existingCluster != null) {
       print('[Nearby] existing cluster found for initiator');
@@ -76,13 +78,13 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
 
   Future<void> _startAdvertising(String clusterId, String clusterName) async {
     print("[Nearby]: initiator advertising");
-    
+
     // Ensure uuid is initialized
     if (uuid == null) {
       print('[Nearby] Error: uuid not initialized in _startAdvertising');
       return;
     }
-    
+
     final endpointName = "ac|$uuid|$clusterId|$clusterName";
     print("[Nearby]: 📡 Advertising with name: $endpointName");
     try {
@@ -102,13 +104,13 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
 
   Future<void> _startDiscovery() async {
     print("[Nearby]: initiator discovering");
-    
+
     // Ensure deviceName is initialized
     if (deviceName == null) {
       print('[Nearby] Error: deviceName not initialized in _startDiscovery');
       return;
     }
-    
+
     try {
       await Nearby().startDiscovery(
         deviceName!,
@@ -162,7 +164,9 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
 
     // Ensure repositories are initialized
     if (deviceRepository == null || clusterMemberRepository == null) {
-      print('[Nearby] Error: repositories not initialized in _onConnectionResult');
+      print(
+        '[Nearby] Error: repositories not initialized in _onConnectionResult',
+      );
       return;
     }
 
@@ -189,11 +193,13 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
     print("[Nearby] Sending CLUSTER_INFO for clusterId: $clusterId");
 
     // Ensure repositories and device info are initialized
-    if (clusterMemberRepository == null || 
-        deviceRepository == null || 
-        uuid == null || 
+    if (clusterMemberRepository == null ||
+        deviceRepository == null ||
+        uuid == null ||
         deviceName == null) {
-      print('[Nearby] Error: repositories or device info not initialized in _sendClusterInfo');
+      print(
+        '[Nearby] Error: repositories or device info not initialized in _sendClusterInfo',
+      );
       return;
     }
 
@@ -255,7 +261,9 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
 
     // Ensure deviceRepository is initialized
     if (deviceRepository == null) {
-      print('[Nearby] Error: deviceRepository not initialized in _onEndpointFound');
+      print(
+        '[Nearby] Error: deviceRepository not initialized in _onEndpointFound',
+      );
       return;
     }
 
@@ -290,7 +298,9 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
 
     // Ensure deviceRepository and uuid are initialized
     if (deviceRepository == null || uuid == null) {
-      print('[Nearby] Error: deviceRepository or uuid not initialized in _loadAvailableDevices');
+      print(
+        '[Nearby] Error: deviceRepository or uuid not initialized in _loadAvailableDevices',
+      );
       return;
     }
 
@@ -309,7 +319,9 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
 
     // Ensure deviceRepository is initialized
     if (deviceRepository == null) {
-      print('[Nearby] Error: deviceRepository not initialized in _onEndpointLost');
+      print(
+        '[Nearby] Error: deviceRepository not initialized in _onEndpointLost',
+      );
       return;
     }
 
@@ -409,7 +421,9 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
 
     // Ensure repositories are initialized
     if (deviceRepository == null || clusterMemberRepository == null) {
-      print('[Nearby] Error: repositories not initialized in _onInviteConnectionResult');
+      print(
+        '[Nearby] Error: repositories not initialized in _onInviteConnectionResult',
+      );
       return;
     }
 
@@ -441,7 +455,9 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
 
     // Ensure repositories are initialized
     if (deviceRepository == null || clusterMemberRepository == null) {
-      print('[Nearby] Error: repositories not initialized in _onInviteDisconnected');
+      print(
+        '[Nearby] Error: repositories not initialized in _onInviteDisconnected',
+      );
       return;
     }
 
@@ -462,10 +478,12 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
     if (_createdCluster == null || _connectedEndpoints.isEmpty) return;
 
     // Ensure repositories and uuid are initialized
-    if (clusterMemberRepository == null || 
-        deviceRepository == null || 
+    if (clusterMemberRepository == null ||
+        deviceRepository == null ||
         uuid == null) {
-      print('[Nearby] Error: repositories or uuid not initialized in transferOwnershipBeforeDisconnect');
+      print(
+        '[Nearby] Error: repositories or uuid not initialized in transferOwnershipBeforeDisconnect',
+      );
       return;
     }
 
@@ -526,30 +544,29 @@ class NearbyConnectionsInitiator extends NearbyConnectionsBase {
 
   @override
   Future<void> stopAll() async {
-    print("[Nearby]: stopping all for initiator");
+    debugPrint("[Nearby]: stopping all for initiator");
 
     await transferOwnershipBeforeDisconnect();
     await stopAdvertising();
     await stopDiscovery();
 
-    for (var endpointId in _connectedEndpoints) {
+    for (final endpointId in List.of(_connectedEndpoints)) {
       await Nearby().disconnectFromEndpoint(endpointId);
     }
 
-    // Ensure repositories and uuid are initialized before cleanup
     if (clusterMemberRepository != null && uuid != null) {
       await clusterMemberRepository!.deleteAllMembersByDevice(uuid!);
     }
+
     if (clusterRepository != null && uuid != null) {
       await clusterRepository!.deleteClusterByOwner(uuid!);
     }
 
-    _connectedEndpoints.clear();
-    _activeConnections.clear();
     _createdCluster = null;
     _availableDevices.clear();
     _pendingConnections.clear();
     _pendingInvites.clear();
-    notifyListeners();
+
+    clearAllConnections();
   }
 }

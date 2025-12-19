@@ -100,7 +100,10 @@ class DashboardViewModel extends ChangeNotifier {
   void _handleJoinerStateChange() {
     final joiner = nearby as NearbyConnectionsJoiner;
     joinedCluster = joiner.joinedCluster;
-    discoveredClusters = joiner.discoveredClusters;
+    discoveredClusters = List<Map<String, dynamic>>.from(
+      joiner.discoveredClusters,
+    );
+
     _loadConnectedDevicesJoiner();
     notifyListeners();
   }
@@ -350,7 +353,7 @@ class DashboardViewModel extends ChangeNotifier {
         messageText,
         timestamp,
       );
-    await chatMessageRepository.insertMessage(
+      await chatMessageRepository.insertMessage(
         ChatMessage(
           id: messageId,
           chatId: chatId,
@@ -359,7 +362,7 @@ class DashboardViewModel extends ChangeNotifier {
           timestamp: timestamp,
         ),
       );
-    
+
       print('[DashboardViewModel] Sent quick message to ${device.deviceName}');
     } catch (e) {
       print('[DashboardViewModel] Error sending quick message: $e');
@@ -375,6 +378,30 @@ class DashboardViewModel extends ChangeNotifier {
     List<String> uuids = [uuid1, uuid2];
     uuids.sort();
     return '${uuids[0]}_${uuids[1]}';
+  }
+
+  // In dashboard_page.dart or dashboard_view_model.dart
+  void navigateToGroupChat(BuildContext context, String clusterId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            ChatPage(clusterId: clusterId, isGroupChat: true, nearby: nearby),
+      ),
+    );
+  }
+
+  void navigateToPrivateChat(BuildContext context, String deviceUuid) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChatPage(
+          deviceUuid: deviceUuid,
+          isGroupChat: false,
+          nearby: nearby,
+        ),
+      ),
+    );
   }
 
   @override

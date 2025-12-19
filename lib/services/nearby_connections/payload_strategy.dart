@@ -1,3 +1,3 @@
 abstract class PayloadStrategy {
-  void handle(String data, String endpointId);
+  Future<void> handle(String endpointId, Map<String, dynamic> data);
 }

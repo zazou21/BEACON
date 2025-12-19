@@ -1,7 +1,9 @@
+import 'package:beacon_project/services/text_to_speech.dart';
+import 'package:beacon_project/viewmodels/dashboard_view_model.dart';
+import 'package:beacon_project/viewmodels/resource_viewmodel.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
+import 'package:provider/provider.dart';
 import 'theme.dart';
 import 'screens/dashboard_page.dart';
 import 'screens/chat_page.dart';
@@ -9,90 +11,109 @@ import 'screens/resources_page.dart';
 import 'screens/profile_page.dart';
 import 'services/voice_commands.dart';
 import 'services/db_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:beacon_project/models/dashboard_mode.dart';
+import 'package:beacon_project/services/nearby_connections/nearby_connections.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  // Ensure DB is initialized early (optional)
-  await DBService().database;
-
-  final prefs = await SharedPreferences.getInstance();
-  final profileCompleted = prefs.getBool('profileCompleted') ?? false;
-
-  runApp(BeaconApp(profileCompleted: profileCompleted));
+void main() {
+  runApp(const BeaconApp());
 }
 
 class BeaconApp extends StatefulWidget {
-  final bool profileCompleted;
-  const BeaconApp({super.key, required this.profileCompleted});
+  const BeaconApp({super.key});
 
   @override
   State<BeaconApp> createState() => _BeaconAppState();
 }
 
-class _BeaconAppState extends State<BeaconApp> {
+class _BeaconAppState extends State<BeaconApp> with WidgetsBindingObserver {
   bool isDarkMode = false;
-
-  void toggleTheme() => setState(() => isDarkMode = !isDarkMode);
-
-  ThemeData get currentTheme => isDarkMode ? darkTheme() : lightTheme();
-
-  late final GoRouter _router;
+  NearbyConnectionsBase? _beacon;
 
   @override
   void initState() {
     super.initState();
-    _router = GoRouter(
-      initialLocation: widget.profileCompleted ? '/dashboard' : '/profile',
-      routes: [
-        GoRoute(
-          path: '/',
-          name: 'landing',
-          builder: (context, state) => const LandingPage(),
-        ),
-
-        // ShellRoute for bottom navigation
-        ShellRoute(
-          builder: (context, state, child) {
-            return HomeShell(child: child);
-          },
-          routes: [
-            GoRoute(
-              path: '/dashboard',
-              name: 'dashboard',
-              builder: (context, state) {
-                final modeParam = state.uri.queryParameters['mode'] ?? 'browse';
-                late final DashboardMode mode;
-                if (modeParam == 'joiner') {
-                  mode = DashboardMode.joiner;
-                } else if (modeParam == 'initiator') {
-                  mode = DashboardMode.initiator;
-                } else {
-                  mode = DashboardMode.joiner;
-                }
-                return DashboardPage(mode: mode);
-              },
-            ),
-            GoRoute(
-              path: '/chat',
-              name: 'chat',
-              builder: (context, state) => const ChatPage(macAddress: ''),
-            ),
-            GoRoute(
-              path: '/resources',
-              name: 'resources',
-              builder: (context, state) => const ResourcePage(),
-            ),
-            GoRoute(
-              path: '/profile',
-              name: 'profile',
-              builder: (context, state) => const UserProfilePage(),
-            ),
-          ],
-        ),
-      ],
-    );
+    WidgetsBinding.instance.addObserver(this);
   }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      print('[App Lifecycle] App paused - marking offline');
+      _markOffline();
+    } else if (state == AppLifecycleState.resumed) {
+      print('[App Lifecycle] App resumed - marking online');
+      _markOnline();
+    }
+  }
+
+  void _markOffline() async {
+    if (mounted) {
+      try {
+        // Get the saved dashboard mode to determine which beacon instance to use
+        final prefs = await SharedPreferences.getInstance();
+        final modeStr = prefs.getString('dashboard_mode') ?? 'joiner';
+        final isInitiator = modeStr == 'initiator';
+        debugPrint(
+          '[_markOffline] Dashboard mode: $modeStr, isInitiator: $isInitiator',
+        );
+
+        // Get the appropriate beacon singleton instance
+        final beacon = isInitiator
+            ? NearbyConnectionsInitiator()
+            : NearbyConnectionsJoiner();
+
+        print(
+          '[App Lifecycle] Marking offline for ${beacon.connectedEndpoints.length} endpoints',
+        );
+        for (var endpointId in beacon.connectedEndpoints) {
+          print('[App Lifecycle] Sending MARK_OFFLINE to $endpointId');
+          beacon.sendMessage(endpointId, "MARK_OFFLINE", {"uuid": beacon.uuid});
+        }
+      } catch (e) {
+        print('[App Lifecycle] Error marking offline: $e');
+      }
+    }
+  }
+
+  void _markOnline() async {
+    if (mounted) {
+      try {
+        // Get the saved dashboard mode to determine which beacon instance to use
+        final prefs = await SharedPreferences.getInstance();
+        final modeStr = prefs.getString('dashboard_mode') ?? 'joiner';
+        final isInitiator = modeStr == 'initiator';
+        debugPrint(
+          '[_markOnline] Dashboard mode: $modeStr, isInitiator: $isInitiator',
+        );
+
+        // Get the appropriate beacon singleton instance
+        final beacon = isInitiator
+            ? NearbyConnectionsInitiator()
+            : NearbyConnectionsJoiner();
+
+        print(
+          '[App Lifecycle] Marking online for ${beacon.connectedEndpoints.length} endpoints',
+        );
+        for (var endpointId in beacon.connectedEndpoints) {
+          print('[App Lifecycle] Sending MARK_ONLINE to $endpointId');
+          beacon.sendMessage(endpointId, "MARK_ONLINE", {"uuid": beacon.uuid});
+        }
+      } catch (e) {
+        print('[App Lifecycle] Error marking online: $e');
+      }
+    }
+  }
+
+  void toggleTheme() => setState(() => isDarkMode = !isDarkMode);
+
+  ThemeData get currentTheme => isDarkMode ? darkTheme() : lightTheme();
 
   @override
   Widget build(BuildContext context) {
@@ -105,14 +126,75 @@ class _BeaconAppState extends State<BeaconApp> {
   }
 }
 
+final GoRouter _router = GoRouter(
+  initialLocation: '/',
+  routes: [
+    GoRoute(
+      path: '/',
+      name: 'landing',
+      builder: (context, state) => const LandingPage(),
+    ),
+
+    // ShellRoute provides a persistent scaffold with BottomNavigationBar
+    ShellRoute(
+      builder: (context, state, child) {
+        return HomeShell(child: child);
+      },
+      routes: [
+        GoRoute(
+          path: '/dashboard',
+          name: 'dashboard',
+          builder: (context, state) {
+            // Parse mode from query parameters
+            final modeParam = state.uri.queryParameters['mode'] ?? 'browse';
+            print('[Router] Dashboard mode param: $modeParam');
+            late final DashboardMode mode;
+            if (modeParam == 'joiner') {
+              mode = DashboardMode.joiner;
+            } else if (modeParam == 'initiator') {
+              mode = DashboardMode.initiator;
+            } else {
+              mode = DashboardMode.joiner; // default fallback
+            }
+            return DashboardPage(mode: mode);
+          },
+        ),
+
+        // GoRoute(
+        //   path: '/chat',
+        //   name: 'chat',
+        //   builder: (context, state) => ChatPage( ''),
+        // ),
+        GoRoute(
+          path: '/resources',
+          name: 'resources',
+          builder: (context, state) => const ResourcePage(),
+        ),
+        GoRoute(
+          path: '/profile',
+          name: 'profile',
+          builder: (context, state) => const UserProfilePage(),
+        ),
+        // route to landing
+        GoRoute(
+          path: '/',
+          name: ' ',
+          builder: (context, state) => const LandingPage(),
+        ),
+      ],
+    ),
+  ],
+);
+
 // ---------------------------
-// Theme toggle and DB flush (kept as before)
+// Helper widget: ThemeToggleButton
 // ---------------------------
 class ThemeToggleButton extends StatelessWidget {
   const ThemeToggleButton({super.key});
 
   @override
   Widget build(BuildContext context) {
+    // Find the BeaconApp state to toggle the theme
     final appState = context.findAncestorStateOfType<_BeaconAppState>();
     final isDark =
         appState?.isDarkMode ?? Theme.of(context).brightness == Brightness.dark;
@@ -127,7 +209,6 @@ class ThemeToggleButton extends StatelessWidget {
   }
 }
 
-// DbFlushButton and onFlush preserved
 class DbFlushButton extends StatelessWidget {
   final VoidCallback onFlush;
   const DbFlushButton({super.key, required this.onFlush});
@@ -149,10 +230,11 @@ void onFlush() async {
   await db.delete('devices');
   await db.delete('clusters');
   await db.delete('cluster_members');
-  await db.delete('profile');
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.remove('profileCompleted');
 }
+
+// ---------------------------
+// DB Flush Button
+// ---------------------------
 
 // ---------------------------
 // Landing Page
@@ -162,16 +244,26 @@ class LandingPage extends StatelessWidget {
 
   void _startNew(BuildContext context) {
     // Navigate to chat in "start" mode
+    // Navigate to dashboard in "initiator" mode
     context.go('/dashboard?mode=initiator');
   }
 
   void _joinExisting(BuildContext context) {
-    // Navigate to dashboard in "join" mode
+    // Navigate to dashboard in "joiner" mode
     context.go('/dashboard?mode=joiner');
+  }
+
+  Future<void> deleteSavedDashboardMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('dashboard_mode');
   }
 
   @override
   Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      deleteSavedDashboardMode();
+    });
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('BEACON'),
@@ -179,7 +271,7 @@ class LandingPage extends StatelessWidget {
         actions: const [
           // Theme toggle in Landing AppBar
           ThemeToggleButton(),
-          DbFlushButton(onFlush: onFlush)
+          DbFlushButton(onFlush: onFlush),
         ],
       ),
       body: SafeArea(
@@ -237,7 +329,7 @@ class LandingPage extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 24),
-        VoiceCommandWidget(),
+        VoiceCommandWidget(buttonMode: true),
       ],
     );
   }
@@ -304,7 +396,7 @@ class LandingPage extends StatelessWidget {
 }
 
 // ---------------------------
-// HomeShell with Bottom Navigation (now with AppBar + Theme toggle)
+// HomeShell with Bottom Navigation
 // ---------------------------
 class HomeShell extends StatefulWidget {
   final Widget child;
@@ -315,11 +407,33 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
+  Future<DashboardMode?> getSavedDashboardMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('dashboard_mode');
+    ResourceViewModel? resourceViewModel;
+    DashboardViewModel? dashboardViewModel;
+
+    void setResourceViewModel(ResourceViewModel vm) {
+      resourceViewModel = vm;
+    }
+
+    void setDashboardViewModel(DashboardViewModel vm) {
+      dashboardViewModel = vm;
+    }
+
+    if (saved == null) return null;
+    return DashboardMode.values.firstWhere(
+      (e) => e.name == saved,
+      orElse: () => DashboardMode.joiner,
+    );
+  }
+
   final Map<String, int> _locationToIndex = {
     '/dashboard': 0,
     '/chat': 1,
     '/resources': 2,
     '/profile': 3,
+    '/': 4,
   };
 
   final Map<int, String> _indexToTitle = {
@@ -327,15 +441,18 @@ class _HomeShellState extends State<HomeShell> {
     1: 'Chat',
     2: 'Resources',
     3: 'Profile',
+    4: 'Landing',
   };
 
   int _currentIndex = 0;
 
-  void _onTap(int index) {
+  void _onTap(int index) async {
+    final mode = await getSavedDashboardMode();
     setState(() => _currentIndex = index);
+
     switch (index) {
       case 0:
-        context.go('/dashboard');
+        context.go('/dashboard?mode=${mode?.name ?? 'joiner'}');
         break;
       case 1:
         context.go('/chat');
@@ -345,6 +462,9 @@ class _HomeShellState extends State<HomeShell> {
         break;
       case 3:
         context.go('/profile');
+        break;
+      case 4:
+        context.go('/');
         break;
     }
   }
@@ -380,10 +500,22 @@ class _HomeShellState extends State<HomeShell> {
         title: Text(title),
         actions: const [
           ThemeToggleButton(),
-          DbFlushButton(onFlush: onFlush) // shared toggle here so all inner pages show it
+          DbFlushButton(onFlush: onFlush),
         ],
       ),
-      body: widget.child,
+      body: Stack(
+        children: [
+          // The actual page content
+          widget.child,
+
+          // Small voice button above the bottom navigation bar
+          Positioned(
+            right: 16,
+            bottom: kBottomNavigationBarHeight + 6,
+            child: const VoiceCommandWidget(),
+          ),
+        ],
+      ),
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
         currentIndex: _currentIndex,
@@ -399,6 +531,7 @@ class _HomeShellState extends State<HomeShell> {
             label: 'Resources',
           ),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Landing'),
         ],
       ),
     );

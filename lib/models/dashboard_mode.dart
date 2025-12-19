@@ -1,0 +1,1 @@
+enum DashboardMode { initiator, joiner }

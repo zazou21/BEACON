@@ -1,12 +1,32 @@
-import 'package:flutter/material.dart';
-import 'package:beacon_project/services/nearby_connections/nearby_connections.dart';
-import 'package:beacon_project/services/db_service.dart';
 import 'package:beacon_project/models/device.dart';
-import 'package:beacon_project/models/cluster.dart';
-import 'package:nearby_connections/nearby_connections.dart';
-import 'package:sqflite/sqflite.dart';
+import 'package:beacon_project/repositories/chat_repository.dart';
+import 'package:beacon_project/screens/chat_page.dart';
+import 'package:beacon_project/services/text_to_speech.dart';
+import 'package:beacon_project/repositories/device_repository_impl.dart';
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+import 'package:beacon_project/viewmodels/dashboard_view_model.dart';
+import 'package:beacon_project/models/dashboard_mode.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:beacon_project/services/nearby_connections/nearby_connections.dart';
+import 'package:beacon_project/services/nearby_connections/mode_change_notifier.dart';
+import 'dart:async';
+import 'package:beacon_project/services/db_service.dart';
+import 'package:beacon_project/repositories/cluster_repository_impl.dart';
+import 'package:beacon_project/repositories/cluster_member_repository.dart';
+import 'package:beacon_project/repositories/cluster_member_repository_impl.dart';
+import 'package:beacon_project/repositories/chat_repository_impl.dart';
+import 'package:beacon_project/repositories/chat_message_repository_impl.dart';
 
-enum DashboardMode { initiator, joiner }
+Future<void> saveModeOnce(DashboardMode mode) async {
+  final prefs = await SharedPreferences.getInstance();
+  final savedMode = prefs.getString('dashboard_mode');
+
+  if (savedMode == null || savedMode.isEmpty) {
+    await prefs.setString('dashboard_mode', mode.name);
+  }
+}
 
 class DashboardPage extends StatefulWidget {
   final DashboardMode mode;
@@ -17,290 +37,701 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  final beacon = NearbyConnections();
-
-  List<Device> availableDevices = [];
-  List<Device> connectedDevices = [];
-  List<Map<String, String>> discoveredClusters = [];
-  List<Cluster> joinedClusters = [];
-  Cluster? currentCluster;
+  late DashboardViewModel _viewModel;
+  StreamSubscription<DashboardMode>? _modeChangeSubscription;
+  late DashboardMode _currentMode;
+  bool _isTransitioning = false;
 
   @override
   void initState() {
     super.initState();
-    _setupBeacon();
-  }
+    _currentMode = widget.mode;
+    saveModeOnce(widget.mode);
+    final dbService = DBService();
+    final deviceRepository = DeviceRepositoryImpl(dbService);
+    final clusterRepository = ClusterRepositoryImpl(dbService);
+    final clusterMemberRepository = ClusterMemberRepositoryImpl(dbService);
+    final chatRepository = ChatRepositoryImpl(dbService);
+    final chatMessageRepository = ChatMessageRepositoryImpl(dbService);
 
-  Future<void> _setupBeacon() async {
-    await beacon.init();
+    _viewModel = DashboardViewModel(
+      mode: _currentMode,
+      deviceRepository: deviceRepository,
+      clusterRepository: clusterRepository,
+      clusterMemberRepository: clusterMemberRepository,
+      chatRepository: chatRepository,
+      chatMessageRepository: chatMessageRepository,
+    );
+    _viewModel.initializeNearby();
 
-    if (widget.mode == DashboardMode.joiner) {
-      await beacon.joinCommunication();
-    } else {
-      await beacon.initiateCommunication();
-    }
-
-    // for the discovery of devices & clusters
-    beacon.onDeviceFound = _onDeviceFoundHandler; // for initiator mode
-    beacon.onClusterFound = _onClusterFoundHandler; // for joiner mode
-
-    beacon.onConnectionRequest =
-        _onConnectionRequestHandler; // show invite dialog (joiner)
-
-    beacon.onClusterJoinedInitiatorSide =
-        _onClusterJoinedInitiatorSideHandler; // update connected devices list (initiator)
-
-    beacon.onClusterJoinedJoinerSide =
-        _onClusterJoinedJoinerSideHandler; // update joined clusters list (joiner)
-
-    await _loadCurrentCluster();
-    setState(() {});
-  }
-
-  Future<void> _loadCurrentCluster() async {
-    final db = await DBService().database;
-    final results = await db.query("clusters");
-    if (results.isNotEmpty) {
-      currentCluster = Cluster.fromMap(results.first);
-      if (widget.mode == DashboardMode.initiator) {
-        await _loadConnectedDevices();
+    // Listen for mode changes
+    _modeChangeSubscription = ModeChangeNotifier().modeChangeStream.listen((
+      newMode,
+    ) {
+      if (newMode != _currentMode && !_isTransitioning) {
+        _handleModeChange(newMode);
       }
-    }
-    setState(() {});
-  }
-
-  // load connected devices excluding self & remove user from availableDevices list
-  Future<void> _loadConnectedDevices() async {
-    if (currentCluster == null) return;
-    final db = await DBService().database;
-    // Get members in current cluster except itself
-    final members = await db.query(
-      "cluster_members",
-      where: "clusterId = ? AND deviceUuid != ?",
-      whereArgs: [currentCluster!.clusterId, beacon.uuid],
-    );
-    // Map to Device if needed; here assuming device info is in "devices" table
-    final devicesMaps = await db.query(
-      "devices",
-      where: "uuid IN (${List.filled(members.length, '?').join(',')})",
-      whereArgs: members.map((e) => e["deviceUuid"]).toList(),
-    );
-
-    connectedDevices = devicesMaps.map((map) => Device.fromMap(map)).toList();
-    availableDevices.removeWhere(
-      (d) => connectedDevices.any((cd) => cd.endpointId == d.endpointId),
-    );
-    print("Connected Devices Loaded: $connectedDevices");
-    setState(() {});
-  }
-
-  void _onDeviceFoundHandler(Device d) {
-    final exists = availableDevices.any((x) => x.endpointId == d.endpointId);
-    if (!exists) {
-      setState(() => availableDevices.add(d));
-    }
-
-    print("Device Found: ${d.deviceName} (${d.uuid})");
-    setState(() {});
-  }
-
-  // load clusters from database (joiner mode ) and add them to discoveredClusters list
-  // endpoint id msh fl database, 7ases we should add it, bas msh 2ader // mesh hases lazem ne add it
-
-  void _onClusterFoundHandler(Map<String, String> clusterInfo) {
-    discoveredClusters.add(clusterInfo);
-    print("Cluster Found: $clusterInfo");
-    setState(() {});
-  }
-
-  void _onClusterJoinedInitiatorSideHandler(String clusterId) async {
-    print("Joined Cluster: $clusterId");
-    await _loadConnectedDevices();
-    setState(() {});
-  }
-
-  void _onClusterJoinedJoinerSideHandler(String clusterId) async {
-    print("Joined Cluster (Joiner Side): $clusterId");
-    final db = await DBService().database;
-    final clusterMaps = await db.query(
-      "clusters",
-      where: "clusterId = ?",
-      whereArgs: [clusterId],
-    );
-    if (clusterMaps.isNotEmpty) {
-      final cluster = Cluster.fromMap(clusterMaps.first);
-      joinedClusters.add(cluster);
-      setState(() {});
-    }
-  }
-
-  // show invite dialog on connection request
-  void _onConnectionRequestHandler(String endpointId, ConnectionInfo info) {
-    print("Connection Request from $endpointId");
-
-    // Format: <initiatorUuid>|<clusterId>
-    final parts = info.endpointName.split("|");
-
-    if (parts.length < 2) {
-      print("Malformed endpointName from initiator.");
-      return;
-    }
-
-    final clusterId = parts[1];
-    final clusterName = "Cluster $clusterId"; // or look up name in DB
-
-    _showInviteDialog(endpointId, clusterName, clusterId);
-  }
-
-  void _showInviteDialog(
-    String endpointId,
-    String clusterName,
-    String clusterId,
-  ) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text("Network Invitation"),
-        content: Text("Do you want to join $clusterName?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text("Reject"),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(dialogContext);
-
-              await beacon.acceptInvite(endpointId);
-
-              // Optional: Update DB
-              final db = await DBService().database;
-              await db.insert("cluster_members", {
-                "clusterId": clusterId,
-                "deviceUuid": beacon.uuid,
-              }, conflictAlgorithm: ConflictAlgorithm.ignore);
-            },
-            child: const Text("Join"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // This method invites a joiner device to the cluster (initiator)
-  void _inviteJoiner(String endpointId, String joinerUuid) {
-    if (currentCluster == null) return;
-    beacon.sendControlMessage(endpointId, {
-      "type": "cluster_invite",
-      "clusterId": currentCluster!.clusterId,
-      "clusterName": currentCluster!.name,
     });
   }
 
-  // This method prints database contents for debugging purposes
-  Future<void> _printDatabaseContents() async {
-    final db = await DBService().database;
-    final devices = await db.query("devices");
-    final clusters = await db.query("clusters");
-    final members = await db.query("cluster_members");
+  Future<void> _handleModeChange(DashboardMode newMode) async {
+    if (_isTransitioning) return;
 
-    print("Devices: $devices");
-    print("Clusters: $clusters");
-    print("Cluster Members: $members");
+    setState(() => _isTransitioning = true);
+
+    print('[Dashboard] 🔄 Mode change detected: $_currentMode -> $newMode');
+
+    try {
+      print('[Dashboard] Stopping old mode services...');
+      await _viewModel.nearby.stopAdvertising();
+      await _viewModel.nearby.stopDiscovery();
+
+      // Add delay to ensure cleanup completes
+      await Future.delayed(const Duration(milliseconds: 800));
+
+      _viewModel.nearby.removeListener(_viewModel.onNearbyStateChanged);
+
+      // Reset singleton state before reusing
+      _viewModel.nearby.resetState();
+
+      setState(() {
+        _currentMode = newMode;
+      });
+
+      print('[Dashboard] Creating new ViewModel for $newMode');
+      _viewModel.dispose();
+
+      _viewModel = DashboardViewModel(
+        mode: newMode,
+        deviceRepository: _viewModel.deviceRepository,
+        clusterRepository: _viewModel.clusterRepository,
+        clusterMemberRepository: _viewModel.clusterMemberRepository,
+        chatRepository: _viewModel.chatRepository,
+        chatMessageRepository: _viewModel.chatMessageRepository,
+      );
+
+      print('[Dashboard] Initializing new nearby service...');
+      await _viewModel.initializeNearby();
+
+      print(
+        '[Dashboard] Mode change complete - now ${newMode == DashboardMode.initiator ? "OWNER (advertising)" : "MEMBER"}',
+      );
+
+      // Show a notification
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.star, color: Colors.white),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'You are now the cluster owner!',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.blue,
+            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      print('[Dashboard]: Error during mode change: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error changing mode: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isTransitioning = false);
+      }
+    }
   }
 
-  // UI build function with connectedDevices section for initiator mode
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Dashboard"),
+  void dispose() {
+    _modeChangeSubscription?.cancel();
+    _viewModel.dispose();
+    super.dispose();
+  }
+
+  void _showInviteDialog() {
+    if (_currentMode != DashboardMode.joiner) return;
+
+    final joiner = _viewModel.nearby as NearbyConnectionsJoiner;
+    final info = joiner.pendingInviteInfo;
+    final endpointId = joiner.pendingInviteEndpointId;
+    if (info == null || endpointId == null) return;
+
+    final parts = info.endpointName.split("|");
+    if (parts.length < 2) return;
+
+    final clusterId = parts[1];
+    // find the cluster name from discovered clusters
+    final clusterName = _viewModel.discoveredClusters.firstWhere(
+      (c) => c["clusterId"] == clusterId,
+      orElse: () => {"clusterName": "Unknown"},
+    )["clusterName"];
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text("Network Invitation"),
+        content: Text("Do you want to join cluster $clusterName?"),
         actions: [
-          TextButton(
-            onPressed: _printDatabaseContents,
-            child: const Text("Print DB"),
-          ),
-          TextButton(
-            onPressed: () async {
-              await beacon.stopAll();
-              if (!mounted) return;
-              setState(() {
-                currentCluster = null;
-                availableDevices.clear();
-                connectedDevices.clear();
-              });
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              _viewModel.rejectInvite();
             },
-            child: const Text("Stop All"),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text("Reject", style: TextStyle(color: Colors.white)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await _viewModel.acceptInvite(endpointId);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+            child: const Text("Join", style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          if (currentCluster != null)
-            Card(
-              child: ListTile(
-                title: Text("Your Cluster: ${currentCluster!.name}"),
-                subtitle: Text("ID: ${currentCluster!.clusterId}"),
-              ),
-            ),
+    );
+  }
 
-          if (widget.mode == DashboardMode.initiator) ...[
-            const SizedBox(height: 20),
-            const Text("Available Devices"),
-            ...availableDevices.map(
-              (d) => Card(
-                child: ListTile(
-                  title: Text(d.deviceName),
-                  subtitle: Text("UUID: ${d.uuid}"),
-                  trailing: TextButton(
-                    onPressed: () => _inviteJoiner(d.endpointId, d.uuid),
-                    child: const Text("Invite"),
-                  ),
-                ),
-              ),
+  Widget _statusIcon(bool isOnline) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Icon(Icons.smartphone, size: 40, color: Colors.grey[700]),
+        Positioned(
+          right: -2,
+          top: -2,
+          child: Container(
+            width: 16,
+            height: 16,
+            decoration: BoxDecoration(
+              color: isOnline ? Colors.green : Colors.red,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 2),
             ),
+            child: const Icon(Icons.wifi, size: 10, color: Colors.white),
+          ),
+        ),
+      ],
+    );
+  }
 
-            const SizedBox(height: 20),
-            const Text("Connected Devices"),
-            ...connectedDevices.map(
-              (d) => Card(
-                child: ListTile(
-                  title: Text(d.deviceName),
-                  subtitle: Text("UUID: ${d.uuid}"),
-                ),
-              ),
+  Widget _clusterIcon() {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Icon(Icons.people, size: 35, color: Colors.grey[700]),
+        Positioned(
+          right: -4,
+          top: -2,
+          child: Container(
+            width: 16,
+            height: 16,
+            decoration: BoxDecoration(
+              color: Colors.blue,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 2),
             ),
-          ],
+            child: const Icon(Icons.wifi, size: 10, color: Colors.white),
+          ),
+        ),
+      ],
+    );
+  }
 
-          if (widget.mode == DashboardMode.joiner) ...[
-            const SizedBox(height: 20),
-            const Text("Discovered Clusters"),
-            ...discoveredClusters.map(
-              (c) => Card(
-                child: ListTile(
-                  title: Text(c["clusterName"] ?? "Unknown Cluster"),
-                  subtitle: Text("ID: ${c["clusterId"]}"),
-                  trailing: TextButton(
-                    onPressed: () =>
-                        beacon.joinCluster(c["endpointId"]!, c["clusterId"]!),
-                    child: const Text("Join"),
-                  ),
-                ),
-              ),
+  Widget _popupMenu(Device device) {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert),
+      onSelected: (value) {
+        if (value == 'chat') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  ChatPage(deviceUuid: device.uuid, nearby: _viewModel.nearby),
             ),
-            const SizedBox(height: 20),
-            const Text("Joined Clusters"),
-            ...joinedClusters.map(
-              (c) => Card(
-                child: ListTile(
-                  title: Text(c.name),
-                  subtitle: Text("ID: ${c.clusterId}"),
-                ),
-              ),
+          );
+        } else if (value == 'quick_message') {
+          _showQuickMessageDialog(device);
+        }
+      },
+      itemBuilder: (_) => const [
+        PopupMenuItem(value: 'chat', child: Text('Chat')),
+        PopupMenuItem(
+          value: 'quick_message',
+          child: Text('Send Quick Message'),
+        ),
+      ],
+    );
+  }
+
+  Widget _sectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+          color: Colors.grey[800],
+        ),
+      ),
+    );
+  }
+
+  Widget _emptyState(String message) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 40),
+      child: Center(
+        child: Text(
+          message,
+          style: const TextStyle(color: Colors.grey, fontSize: 16),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showDisconnectConfirmation(
+    BuildContext context,
+    DashboardViewModel viewModel,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Disconnect from Cluster'),
+        content: Text(
+          'You are the cluster owner. Ownership will be transferred to another '
+          'member before you disconnect. You will be returned to the home screen.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true), // Return true
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text(
+              'Disconnect',
+              style: TextStyle(color: Colors.white),
             ),
-          ],
+          ),
         ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    // Perform disconnect operations
+    await viewModel.stopAll();
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('dashboard_mode');
+
+    if (context.mounted) {
+      context.go('/');
+    }
+  }
+
+  void _showBroadcastDialog() {
+    final TextEditingController broadcastController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Broadcast Message'),
+        content: TextField(
+          controller: broadcastController,
+          decoration: const InputDecoration(
+            hintText: 'Type your message...',
+            border: OutlineInputBorder(),
+          ),
+          maxLines: 3,
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+            },
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final message = broadcastController.text.trim();
+              Navigator.pop(dialogContext);
+
+              if (message.isNotEmpty) {
+                _viewModel.broadcastMessage(message);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Message broadcasted to all devices'),
+                    backgroundColor: Colors.green,
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+            child: const Text('Send', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    ).whenComplete(() {
+      // Dispose controller after dialog animation completes
+      broadcastController.dispose();
+    });
+  }
+
+  void _showQuickMessageDialog(Device device) {
+    final List<String> quickMessages = [
+      "Need help!",
+      "I'm okay",
+      "On my way",
+      "Emergency!",
+      "Are you there?",
+      "Can you help?",
+    ];
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Send Quick Message to ${device.deviceName}'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: quickMessages.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (context, index) {
+              return ListTile(
+                title: Text(quickMessages[index]),
+                trailing: const Icon(Icons.send, color: Colors.blue),
+                onTap: () {
+                  final message = quickMessages[index];
+                  Navigator.pop(dialogContext);
+
+                  _viewModel.sendQuickMessage(device, message);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Sent "$message" to ${device.deviceName}'),
+                      backgroundColor: Colors.green,
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider.value(
+      value: _viewModel,
+      child: Scaffold(
+        appBar: AppBar(
+          actions: [
+            if (_isTransitioning)
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            TextButton(
+              onPressed: () => _viewModel.printDatabaseContents(),
+              child: const Text("Print DB"),
+            ),
+            TextButton(
+              onPressed: () => _viewModel.stopAll(),
+              child: const Text("Stop All"),
+            ),
+            TtsButton(dashboardViewModel: _viewModel),
+          ],
+        ),
+        body: Consumer<DashboardViewModel>(
+          builder: (context, viewModel, child) {
+            if (_currentMode == DashboardMode.joiner) {
+              final joiner = viewModel.nearby as NearbyConnectionsJoiner;
+              if (joiner.pendingInviteInfo != null) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _showInviteDialog();
+                });
+              }
+            }
+
+            return ListView(
+              padding: const EdgeInsets.all(12),
+              children: [
+                if (viewModel.currentCluster != null)
+                  Column(
+                    children: [
+                      Card(
+                        elevation: 4,
+                        child: ListTile(
+                          leading: _clusterIcon(),
+                          title: Text(
+                            "Your Cluster: ${viewModel.currentCluster!.name}'s Network",
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          //broadcast button
+                          ElevatedButton.icon(
+                            onPressed: () => _showBroadcastDialog(),
+                            icon: const Icon(Icons.campaign),
+                            label: const Text('Broadcast'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 12,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+
+                          //disconnect button
+                          ElevatedButton.icon(
+                            onPressed: () async {
+                              await _showDisconnectConfirmation(
+                                context,
+                                viewModel,
+                              );
+                            },
+                            icon: const Icon(Icons.exit_to_app),
+                            label: Text('Disconnect'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+
+                const SizedBox(height: 20),
+
+                if (_currentMode == DashboardMode.initiator) ...[
+                  _sectionHeader("Available Devices"),
+                  if (viewModel.availableDevices.isEmpty)
+                    _emptyState("No devices found")
+                  else
+                    ...viewModel.availableDevices.map(
+                      (d) => Card(
+                        child: InkWell(
+                          onTap: () => viewModel.inviteToCluster(d),
+                          child: ListTile(
+                            leading: _statusIcon(d.isOnline),
+                            title: Text(d.deviceName),
+                            subtitle: d.isOnline
+                                ? const Text(
+                                    "Tap to invite",
+                                    style: TextStyle(color: Colors.blue),
+                                  )
+                                : Text(
+                                    viewModel.formatLastSeen(
+                                      d.lastSeen.millisecondsSinceEpoch,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 20),
+                  _sectionHeader("Connected Devices"),
+                  if (viewModel.connectedDevices.isEmpty)
+                    _emptyState("No connected devices yet")
+                  else
+                    ...viewModel.connectedDevices.map(
+                      (d) => Card(
+                        child: ListTile(
+                          leading: _statusIcon(d.isOnline),
+                          title: Text(d.deviceName),
+                          subtitle: d.isOnline
+                              ? const Text(
+                                  "Online",
+                                  style: TextStyle(color: Colors.green),
+                                )
+                              : Text(
+                                  viewModel.formatLastSeen(
+                                    d.lastSeen.millisecondsSinceEpoch,
+                                  ),
+                                ),
+                          trailing: _popupMenu(d),
+                        ),
+                      ),
+                    ),
+                ],
+
+                if (_currentMode == DashboardMode.joiner) ...[
+                  _sectionHeader("Discovered Clusters"),
+                  if (viewModel.discoveredClusters.isEmpty)
+                    _emptyState("No clusters found")
+                  else
+                    ...viewModel.discoveredClusters.map(
+                      (c) => Card(
+                        child: InkWell(
+                          onTap: () => viewModel.joinCluster(c),
+                          child: ListTile(
+                            leading: _clusterIcon(),
+                            title: Text("${c["clusterName"]}'s Network"),
+                            subtitle: const Text("Tap to join"),
+                          ),
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 20),
+                  _sectionHeader("Joined Cluster"),
+                  if (viewModel.joinedCluster == null)
+                    _emptyState("No connected cluster yet")
+                  else
+                    Card(
+                      margin: const EdgeInsets.symmetric(
+                        vertical: 8,
+                        horizontal: 12,
+                      ),
+                      elevation: 4,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                _clusterIcon(),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    "${viewModel.joinedCluster!.name}'s Network",
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.campaign,
+                                    color: Colors.blueAccent,
+                                  ),
+                                  onPressed: () => _showBroadcastDialog(),
+                                  tooltip: "Broadcast",
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.exit_to_app,
+                                    color: Colors.redAccent,
+                                  ),
+                                  onPressed: () =>
+                                      viewModel.disconnectFromCluster(),
+                                  tooltip: "Leave",
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            if (viewModel.connectedDevicesToCluster.isNotEmpty)
+                              Divider(height: 1, color: Colors.grey[300]),
+                            const SizedBox(height: 12),
+                            if (viewModel.connectedDevicesToCluster.isEmpty)
+                              const Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: Center(
+                                  child: Text(
+                                    "No other members yet",
+                                    style: TextStyle(
+                                      color: Colors.grey,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            else
+                              ListView.separated(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount:
+                                    viewModel.connectedDevicesToCluster.length,
+                                separatorBuilder: (_, __) =>
+                                    Divider(height: 1, color: Colors.grey[300]),
+                                itemBuilder: (context, index) {
+                                  final d = viewModel
+                                      .connectedDevicesToCluster[index];
+                                  return ListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: _statusIcon(d.isOnline),
+                                    title: Text(d.deviceName),
+                                    subtitle: d.isOnline
+                                        ? const Text(
+                                            "Online",
+                                            style: TextStyle(
+                                              color: Colors.green,
+                                            ),
+                                          )
+                                        : Text(
+                                            viewModel.formatLastSeen(
+                                              d.lastSeen.millisecondsSinceEpoch,
+                                            ),
+                                          ),
+                                    trailing: _popupMenu(d),
+                                  );
+                                },
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ],
+            );
+          },
+        ),
       ),
     );
   }

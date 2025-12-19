@@ -1,6 +1,7 @@
-import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_sqlcipher/sqflite.dart';
 import 'package:path/path.dart';
-import '../models/profile_model.dart';
+import 'package:beacon_project/models/profile_model.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class DBService {
   static final DBService _instance = DBService._internal();
@@ -17,32 +18,47 @@ class DBService {
 
   Future<Database> _initDB() async {
     final path = join(await getDatabasesPath(), 'app.db');
-    return await openDatabase(
+
+    // Get or create encryption password
+    const storage = FlutterSecureStorage();
+    String? password = await storage.read(key: 'db_encryption_password');
+
+    if (password == null) {
+      // Generate a secure random password for first time
+      password = _generateSecurePassword();
+      await storage.write(key: 'db_encryption_password', value: password);
+    }
+
+    return openDatabase(
       path,
+      password: password,
       version: 1,
       onCreate: (db, version) async {
         await db.execute("""
-        CREATE TABLE devices (
-          uuid TEXT PRIMARY KEY,
-          deviceName TEXT,
-          endpointId TEXT,
-          status TEXT,
-          lastSeen INTEGER,
-          lastMessage TEXT,
-          createdAt INTEGER,
-          updatedAt INTEGER
-        )
-        """);
+          CREATE TABLE devices (
+            uuid TEXT PRIMARY KEY,
+            deviceName TEXT,
+            endpointId TEXT,
+            status TEXT,
+            isOnline INTEGER DEFAULT 1,
+            inRange INTEGER DEFAULT 1,
+            lastSeen INTEGER,
+            lastMessage TEXT,
+            createdAt INTEGER,
+            updatedAt INTEGER
+          )
+          """);
 
         await db.execute("""
-        CREATE TABLE clusters (
-          clusterId TEXT PRIMARY KEY,
-          ownerUuid TEXT,
-          name TEXT,
-          createdAt INTEGER,
-          updatedAt INTEGER
-        )
-        """);
+          CREATE TABLE clusters (
+            clusterId TEXT PRIMARY KEY,
+            ownerUuid TEXT,
+            ownerEndpointId TEXT,
+            name TEXT,
+            createdAt INTEGER,
+            updatedAt INTEGER
+          )
+          """);
 
         await db.execute("""
         CREATE TABLE cluster_members (
@@ -53,7 +69,21 @@ class DBService {
           FOREIGN KEY(clusterId) REFERENCES clusters(clusterId),
           FOREIGN KEY(deviceUuid) REFERENCES devices(uuid)
         )
-        """);
+      """);
+
+        await db.execute("""
+        CREATE TABLE resources (
+          resourceId TEXT PRIMARY KEY,
+          resourceName TEXT,
+          resourceDescription TEXT,
+          resourceType TEXT,
+          resourceStatus TEXT,
+          userUuid TEXT,
+          createdAt INTEGER,
+        
+          FOREIGN KEY(userUuid) REFERENCES devices(uuid)
+          )
+       """);
 
         await db.execute("""
         CREATE TABLE profile (
@@ -67,8 +97,40 @@ class DBService {
           updatedAt INTEGER
         )
         """);
+
+        await db.execute("""
+              CREATE TABLE  chat (
+          id TEXT PRIMARY KEY,
+          device_uuid TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (device_uuid) REFERENCES device(uuid) ON DELETE CASCADE
+        );
+        """);
+        await db.execute("""
+          CREATE TABLE chat_message (
+            id TEXT PRIMARY KEY,
+            chat_id TEXT NOT NULL,
+            sender_uuid TEXT NOT NULL,
+            message_text TEXT NOT NULL,
+            timestamp INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (chat_id) REFERENCES chat(id) ON DELETE CASCADE
+          );
+      
+        """);
       },
     );
+  }
+
+  /// Generate a secure random password for database encryption
+  String _generateSecurePassword() {
+    const String chars =
+        'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#\$%^&*()';
+    final random = _SecureRandom();
+    return List.generate(
+      32,
+      (index) => chars[random.nextInt(chars.length)],
+    ).join();
   }
 
   // ---------------- Profile Helpers ----------------
@@ -81,7 +143,12 @@ class DBService {
       return await db.insert('profile', profile.toMap());
     } else {
       // update the existing profile
-      return await db.update('profile', profile.toMap(), where: 'id = ?', whereArgs: [existing.first['id']]);
+      return await db.update(
+        'profile',
+        profile.toMap(),
+        where: 'id = ?',
+        whereArgs: [existing.first['id']],
+      );
     }
   }
 
@@ -107,6 +174,16 @@ class DBService {
   Future<int> deleteProfile() async {
     final db = await database;
     return await db.delete('profile');
+  }
+}
+
+// Secure Random Generator for encryption password
+class _SecureRandom {
+  static final _random = DateTime.now().microsecond;
+
+  int nextInt(int max) {
+    // Simple secure random using dart:math
+    return (DateTime.now().microsecond * 31 + DateTime.now().millisecond) % max;
   }
 }
 

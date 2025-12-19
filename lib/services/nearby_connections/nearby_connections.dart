@@ -50,8 +50,29 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
   String? uuid;
 
   // Getters for reactive state
+  // Getters for reactive state
   List<String> get connectedEndpoints => (_connectedEndpoints);
-  Map<String, String> get activeConnections => _activeConnections;
+
+  Map<String, String> get activeConnections => (_activeConnections);
+
+  // Clear endpoints safely
+  void clearConnectedEndpoints() {
+    _connectedEndpoints.clear();
+    notifyListeners();
+  }
+
+  // Clear active connections safely
+  void clearActiveConnections() {
+    _activeConnections.clear();
+    notifyListeners();
+  }
+
+  // Clear EVERYTHING safely
+  void clearAllConnections() {
+    _connectedEndpoints.clear();
+    _activeConnections.clear();
+    notifyListeners();
+  }
 
   Future<void> init(
     DeviceRepository deviceRepo,
@@ -179,17 +200,17 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
   }
 
   Future<void> stopAll() async {
-    print("[Nearby]: stopping all");
+    debugPrint("[Nearby]: stopping all (base)");
+
     try {
       await Nearby().stopAdvertising();
       await Nearby().stopDiscovery();
       await Nearby().stopAllEndpoints();
     } catch (e) {
-      print('[Nearby] stopAll error: $e');
+      debugPrint('[Nearby] stopAll error: $e');
     }
-    _connectedEndpoints.clear();
-    _activeConnections.clear();
-    notifyListeners();
+
+    clearAllConnections();
   }
 
   // Send chat message to specific endpoint

@@ -4,14 +4,28 @@ import 'package:beacon_project/viewmodels/chat_view_model.dart';
 import 'package:beacon_project/repositories/chat_repository_impl.dart';
 import 'package:beacon_project/repositories/chat_message_repository_impl.dart';
 import 'package:beacon_project/repositories/device_repository_impl.dart';
+import 'package:beacon_project/repositories/cluster_repository_impl.dart';
+import 'package:beacon_project/repositories/cluster_member_repository_impl.dart';
 import 'package:beacon_project/services/db_service.dart';
 import 'package:beacon_project/services/nearby_connections/nearby_connections.dart';
 
 class ChatPage extends StatefulWidget {
-  final String deviceUuid;
+  final String? deviceUuid; // nullable for group chat
+  final String? clusterId; // new parameter for group chat
+  final bool isGroupChat; // flag to distinguish mode
   final NearbyConnectionsBase nearby;
 
-  const ChatPage({super.key, required this.deviceUuid, required this.nearby});
+  const ChatPage({
+    super.key,
+    this.deviceUuid,
+    this.clusterId,
+    this.isGroupChat = false,
+    required this.nearby,
+  }) : assert(
+         (deviceUuid != null && clusterId == null) ||
+             (deviceUuid == null && clusterId != null),
+         'Must provide either deviceUuid or clusterId',
+       );
 
   @override
   State<ChatPage> createState() => _ChatPageState();
@@ -29,8 +43,12 @@ class _ChatPageState extends State<ChatPage> {
       chatRepository: ChatRepositoryImpl(dbService),
       chatMessageRepository: ChatMessageRepositoryImpl(dbService),
       deviceRepository: DeviceRepositoryImpl(dbService),
+      clusterRepository: ClusterRepositoryImpl(dbService),
+      clusterMemberRepository: ClusterMemberRepositoryImpl(dbService),
       nearby: widget.nearby,
       deviceUuid: widget.deviceUuid,
+      clusterId: widget.clusterId,
+      isGroupChat: widget.isGroupChat,
     );
   }
 
@@ -56,39 +74,76 @@ class _ChatPageState extends State<ChatPage> {
           backgroundColor: const Color.fromARGB(255, 10, 51, 85),
           title: Consumer<ChatViewModel>(
             builder: (context, viewModel, child) {
-              return Row(
-                children: [
-                  CircleAvatar(
-                    radius: 18,
-                    backgroundColor: Colors.white,
-                    child: Icon(
-                      Icons.person,
-                      color: const Color.fromARGB(255, 10, 51, 85),
+              // Different title display for group vs private chat
+              if (viewModel.isGroupChat) {
+                return Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 18,
+                      backgroundColor: Colors.white,
+                      child: Icon(
+                        Icons.group,
+                        color: const Color.fromARGB(255, 10, 51, 85),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        viewModel.device?.deviceName ?? 'Loading...',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                    const SizedBox(width: 10),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          viewModel.cluster?.name ?? 'Group Chat',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
                         ),
-                      ),
-                      Text(
-                        viewModel.getLastSeenText(),
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Color.fromARGB(179, 232, 227, 227),
+                        Text(
+                          '${viewModel.clusterMemberCount} members',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color.fromARGB(179, 232, 227, 227),
+                          ),
                         ),
+                      ],
+                    ),
+                  ],
+                );
+              } else {
+                return Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 18,
+                      backgroundColor: Colors.white,
+                      child: Icon(
+                        Icons.person,
+                        color: const Color.fromARGB(255, 10, 51, 85),
                       ),
-                    ],
-                  ),
-                ],
-              );
+                    ),
+                    const SizedBox(width: 10),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          viewModel.device?.deviceName ?? 'Loading...',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        Text(
+                          viewModel.getLastSeenText(),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color.fromARGB(179, 232, 227, 227),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              }
             },
           ),
         ),
@@ -152,6 +207,19 @@ class _ChatPageState extends State<ChatPage> {
                                 ? CrossAxisAlignment.end
                                 : CrossAxisAlignment.start,
                             children: [
+                              // Show sender name in group chat
+                              if (viewModel.isGroupChat && !isMyMessage)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 4),
+                                  child: Text(
+                                    viewModel.getSenderName(message.senderUuid),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                      color: Colors.black54,
+                                    ),
+                                  ),
+                                ),
                               Text(
                                 message.messageText,
                                 style: TextStyle(

@@ -269,7 +269,7 @@ void onFlush() async {
   await db.delete('devices');
   await db.delete('clusters');
   await db.delete('cluster_members');
-  await db.delete('chats');
+  await db.delete('chat');
   await db.delete('chat_messages');
 }
 

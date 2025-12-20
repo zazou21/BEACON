@@ -2,26 +2,27 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:beacon_project/viewmodels/chat_view_model.dart';
+<<<<<<< HEAD
 import 'package:beacon_project/services/nearby_connections/nearby_connections.dart';
+=======
+>>>>>>> d32d5b5c18efe92866c7b8da40a51a038e9204c1
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ChatPage extends StatefulWidget {
-  final String? deviceUuid; // nullable for group chat
-  final String? clusterId; // new parameter for group chat
-  final bool isGroupChat; // flag to distinguish mode
-  final NearbyConnectionsBase? nearby; // optional nearby connections
+  final String? deviceUuid;
+  final String? clusterId;
+  final bool isGroupChat;
 
   const ChatPage({
     super.key,
     this.deviceUuid,
     this.clusterId,
     this.isGroupChat = false,
-    this.nearby,
   }) : assert(
-         (deviceUuid != null && clusterId == null) ||
-             (deviceUuid == null && clusterId != null),
-         'Must provide either deviceUuid or clusterId',
-       );
+          (deviceUuid != null && clusterId == null) ||
+              (deviceUuid == null && clusterId != null),
+          'Must provide either deviceUuid or clusterId',
+        );
 
   @override
   State<ChatPage> createState() => _ChatPageState();
@@ -35,7 +36,6 @@ class _ChatPageState extends State<ChatPage> {
   void initState() {
     super.initState();
     _viewModel = ChatViewModel(
-      nearby: widget.nearby,
       deviceUuid: widget.deviceUuid,
       clusterId: widget.clusterId,
       isGroupChat: widget.isGroupChat,
@@ -68,8 +68,14 @@ class _ChatPageState extends State<ChatPage> {
               if (context.canPop()) {
                 context.pop();
               } else {
+<<<<<<< HEAD
                  final prefs = await SharedPreferences.getInstance();
                 final mode = prefs.getString('dashboard_mode') ?? 'joiner';
+=======
+                final prefs = await SharedPreferences.getInstance();
+                final mode = prefs.getString('dashboard_mode') ?? 'joiner';
+                print('Navigating to dashboard with mode: $mode');
+>>>>>>> d32d5b5c18efe92866c7b8da40a51a038e9204c1
                 context.go('/dashboard?mode=$mode');
               }
             },
@@ -180,7 +186,6 @@ class _ChatPageState extends State<ChatPage> {
                           .messages[viewModel.messages.length - 1 - index];
                       final isMyMessage =
                           message.senderUuid == viewModel.myUuid;
-
                       return Align(
                         alignment: isMyMessage
                             ? Alignment.centerRight

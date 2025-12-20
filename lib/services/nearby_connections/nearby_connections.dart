@@ -49,8 +49,6 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
   String? deviceName;
   String? uuid;
 
-  // Getters for reactive state
-  // Getters for reactive state
   List<String> get connectedEndpoints => (_connectedEndpoints);
 
   Map<String, String> get activeConnections => (_activeConnections);
@@ -91,6 +89,7 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
     // Initialize deviceName and uuid
     deviceName = await _getDeviceName();
     uuid = await _getDeviceUUID();
+    print("Nearby initialized with deviceName: $deviceName, uuid: $uuid");
 
     // initialize the repositories and pass them to the factory
     PayloadStrategyFactory.initialize(
@@ -222,6 +221,9 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
     int timestamp,
   ) async {
     debugPrint("[Nearby]: sending chat message to $endpointId");
+
+    uuid = uuid ?? await _getDeviceUUID();
+
     await sendMessage(endpointId, "CHAT_MESSAGE", {
       "message_id": messageId,
       "chat_id": chatId,
@@ -238,6 +240,8 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
     String messageText,
     int timestamp,
   ) async {
+    print("[Nearby]: broadcasting chat message to all connected endpoints");
+    uuid = uuid ?? await _getDeviceUUID();
     final data = {
       "message_id": messageId,
       "chat_id": chatId,
@@ -246,7 +250,10 @@ abstract class NearbyConnectionsBase extends ChangeNotifier {
       "timestamp": timestamp,
     };
 
+    print("[Nearby]: connected endpoints: $_connectedEndpoints");
+
     for (String endpointId in _connectedEndpoints) {
+      print("[Nearby]: sending to $endpointId");
       await sendMessage(endpointId, "CHAT_MESSAGE", data);
     }
   }

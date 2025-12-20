@@ -48,7 +48,6 @@ class ChatViewModel extends ChangeNotifier {
     DeviceRepository? deviceRepository,
     ClusterRepository? clusterRepository,
     ClusterMemberRepository? clusterMemberRepository,
-    NearbyConnectionsBase? nearby,
     String? deviceUuid,
     String? clusterId,
     this.isGroupChat = false,
@@ -63,10 +62,33 @@ class ChatViewModel extends ChangeNotifier {
     _clusterRepository = clusterRepository ?? ClusterRepositoryImpl(dbService);
     _clusterMemberRepository =
         clusterMemberRepository ?? ClusterMemberRepositoryImpl(dbService);
-    _nearby = nearby ?? NearbyConnectionsJoiner();
 
-    _initialize();
-    _nearby.addListener(_onNearbyStateChanged);
+    // Initialize nearby connection based on saved mode
+    _initializeNearby();
+  }
+
+  // Initialize nearby connection from singleton based on saved mode
+  Future<void> _initializeNearby() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final modeStr = prefs.getString('dashboard_mode') ?? 'joiner';
+      final isInitiator = modeStr == 'initiator';
+
+      _nearby = isInitiator
+          ? NearbyConnectionsInitiator()
+          : NearbyConnectionsJoiner();
+
+      _nearby.addListener(_onNearbyStateChanged);
+
+      print('[ChatViewModel] Initialized nearby: ${_nearby.runtimeType}');
+      print('[ChatViewModel] Connected endpoints: ${_nearby.connectedEndpoints.length}');
+      print('[ChatViewModel] Device UUID: ${_nearby.uuid}');
+
+      // Start initialization after nearby is set
+      _initialize();
+    } catch (e) {
+      print('[ChatViewModel] Error initializing nearby: $e');
+    }
   }
 
   Chat? get chat => _chat;
@@ -107,7 +129,6 @@ class ChatViewModel extends ChangeNotifier {
       _clusterMembers = await _clusterMemberRepository.getMembersByClusterId(
         _clusterId!,
       );
-
       // Load device info for all members
       for (var member in _clusterMembers) {
         if (!_memberDevices.containsKey(member.deviceUuid)) {
@@ -132,13 +153,13 @@ class ChatViewModel extends ChangeNotifier {
       stored = const Uuid().v4();
       await prefs.setString('device_uuid', stored);
     }
+    print("Device UUID: $stored");
     return stored;
   }
 
   Future<void> _initialize() async {
     _isLoading = true;
     notifyListeners();
-
     try {
       _myUuid = await _getDeviceUUID();
 
@@ -177,7 +198,6 @@ class ChatViewModel extends ChangeNotifier {
     // Get or create group chat
     final chatRepository = _chatRepository as ChatRepositoryImpl;
     _chat = await chatRepository.getChatByClusterId(_clusterId!);
-
     if (_chat == null) {
       _chat = Chat(
         id: 'group_$_clusterId',
@@ -256,6 +276,7 @@ class ChatViewModel extends ChangeNotifier {
         if (_device == null) {
           throw Exception("Device not found for private message");
         }
+
         await _nearby.sendChatMessage(
           _device!.endpointId,
           messageId,
@@ -276,7 +297,6 @@ class ChatViewModel extends ChangeNotifier {
 
   Future<void> refreshMessages() async {
     if (_chat == null) return;
-
     try {
       final newMessages = await _chatMessageRepository.getMessagesByChatId(
         _chat!.id,

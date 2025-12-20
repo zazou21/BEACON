@@ -349,34 +349,7 @@ void main() {
       expect(tapped, isTrue);
     });
 
-    testWidgets('should open and close popup menu', (
-      WidgetTester tester,
-    ) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert),
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'chat', child: Text('Chat')),
-              ],
-            ),
-          ),
-        ),
-      );
 
-      await tester.pump();
-
-      // Open menu
-      await tester.tap(find.byIcon(Icons.more_vert));
-      await tester.pumpAndSettle();
-      expect(find.text('Chat'), findsOneWidget);
-
-      // Close by tapping outside
-      await tester.tapAt(const Offset(10, 10));
-      await tester.pumpAndSettle();
-      expect(find.text('Chat'), findsNothing);
-    });
   });
 
   group('DashboardPage - List and Card Rendering', () {

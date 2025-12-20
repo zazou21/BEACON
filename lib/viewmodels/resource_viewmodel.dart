@@ -23,7 +23,6 @@ class ResourceViewModel extends ChangeNotifier {
        _dbService = dbService ?? DBService(),
        beacon = nearbyConnections;
 
-  // test en el default sah
 
   ResourceType selectedTab = ResourceType.foodWater;
   ResourceType get getSelectedTab => selectedTab;

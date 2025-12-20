@@ -2,10 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:beacon_project/viewmodels/chat_view_model.dart';
-<<<<<<< HEAD
-import 'package:beacon_project/services/nearby_connections/nearby_connections.dart';
-=======
->>>>>>> d32d5b5c18efe92866c7b8da40a51a038e9204c1
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ChatPage extends StatefulWidget {
@@ -68,14 +64,9 @@ class _ChatPageState extends State<ChatPage> {
               if (context.canPop()) {
                 context.pop();
               } else {
-<<<<<<< HEAD
-                 final prefs = await SharedPreferences.getInstance();
-                final mode = prefs.getString('dashboard_mode') ?? 'joiner';
-=======
                 final prefs = await SharedPreferences.getInstance();
                 final mode = prefs.getString('dashboard_mode') ?? 'joiner';
                 print('Navigating to dashboard with mode: $mode');
->>>>>>> d32d5b5c18efe92866c7b8da40a51a038e9204c1
                 context.go('/dashboard?mode=$mode');
               }
             },

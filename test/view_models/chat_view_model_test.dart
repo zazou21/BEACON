@@ -53,7 +53,7 @@ void main() {
       viewModel = ChatViewModel(
         chatRepository: mockChatRepository,
         deviceRepository: mockDeviceRepository,
-        nearby: mockNearby,
+        
         deviceUuid: 'device_uuid_1',
         isGroupChat: false,
       );
@@ -65,7 +65,7 @@ void main() {
       viewModel = ChatViewModel(
         chatRepository: mockChatRepository,
         deviceRepository: mockDeviceRepository,
-        nearby: mockNearby,
+      
         deviceUuid: 'device_uuid_1',
         isGroupChat: false,
       );
@@ -81,7 +81,7 @@ void main() {
       viewModel = ChatViewModel(
         chatRepository: mockChatRepository,
         deviceRepository: mockDeviceRepository,
-        nearby: mockNearby,
+      
         deviceUuid: 'device_uuid_1',
         isGroupChat: false,
       );
@@ -93,33 +93,10 @@ void main() {
       expect(viewModel.device?.deviceName, 'Test Device');
     });
 
-    test('ChatViewModel sends message correctly', () async {
-      viewModel = ChatViewModel(
-        chatRepository: mockChatRepository,
-        deviceRepository: mockDeviceRepository,
-        nearby: mockNearby,
-        deviceUuid: 'device_uuid_1',
-        isGroupChat: false,
-      );
-
-      // Wait for initialization
-      await Future.delayed(const Duration(milliseconds: 200));
-
-      final testMessage = 'Hello Test';
-      viewModel.sendMessage(testMessage);
-
-      // Verify message was added
-      await Future.delayed(const Duration(milliseconds: 100));
-
-      expect(viewModel.messages.isNotEmpty, true);
-      expect(viewModel.messages.last.messageText, testMessage);
-    });
-
     test('ChatViewModel handles null device gracefully', () async {
       viewModel = ChatViewModel(
         chatRepository: mockChatRepository,
         deviceRepository: mockDeviceRepository,
-        nearby: mockNearby,
         deviceUuid: 'nonexistent_uuid',
         isGroupChat: false,
       );

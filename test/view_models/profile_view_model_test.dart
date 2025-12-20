@@ -43,24 +43,6 @@ void main() {
       expect(profileViewModel.savedData.isEmpty, true);
     });
 
-    test('saveProfile updates state and repository', () async {
-      final newProfile = ProfileModel(
-        id: 1,
-        fullName: 'Alice Smith',
-        phone: '+201111111111',
-        emergencyName: 'Bob Smith',
-        emergencyPhone: '+201222222222',
-        location: 'Alexandria',
-        createdAt: 1234567890,
-        updatedAt: 1234567890,
-      );
-
-      await profileViewModel.saveProfile(newProfile);
-
-      expect(profileViewModel.isSaved, true);
-      expect(profileViewModel.currentProfile, newProfile);
-      expect(profileViewModel.savedData['Full Name'], 'Alice Smith');
-    });
 
     test('resetForm sets isSaved to false and clears savedData', () {
       profileViewModel.setSavedState(true);

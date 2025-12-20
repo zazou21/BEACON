@@ -107,6 +107,11 @@ class DashboardViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> clearSavedMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('dashboard_mode');
+  }
+
   // INITIATOR METHODS
   Future<void> _loadCurrentClusterInitiator() async {
     print("[DASHBOARD]: loading current cluster");

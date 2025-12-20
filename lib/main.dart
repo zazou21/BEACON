@@ -50,7 +50,8 @@ void setLoggedIn(bool value) {
 String _pendingDashboardMode = 'joiner';
 
 // Global saved dashboard mode - loaded from prefs
-String _savedDashboardMode = 'joiner';
+// Empty means "no saved mode" (e.g., after disconnect clears dashboard_mode).
+String _savedDashboardMode = '';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -111,7 +112,7 @@ void main() async {
 
   final prefs = await SharedPreferences.getInstance();
   _isLoggedIn = prefs.getBool('is_logged_in') ?? false;
-  _savedDashboardMode = prefs.getString('dashboard_mode') ?? 'joiner';
+  _savedDashboardMode = prefs.getString('dashboard_mode') ?? '';
   print(
     '[Main] Loaded is_logged_in: $_isLoggedIn, dashboard_mode: $_savedDashboardMode',
   );
@@ -280,12 +281,14 @@ final GoRouter _router = GoRouter(
         matchedLoc.contains('/chat') ||
         matchedLoc.contains('/resources');
 
-    // Allow access to landing if explicitly requested (force=true)
+ 
     final forceParam = state.uri.queryParameters['force'];
     final forceLanding = forceParam == 'true';
 
     // If logged in and on landing page (without force), redirect to dashboard
-    if (_isLoggedIn && matchedLoc == '/' && !forceLanding) {
+    // ONLY when a dashboard mode is saved. If dashboard_mode was cleared
+    // (e.g., after disconnect), allow Landing to show.
+    if (_isLoggedIn && matchedLoc == '/' && !forceLanding && _savedDashboardMode.isNotEmpty) {
       print(
         '[Router Redirect] REDIRECTING to /dashboard?mode=$_savedDashboardMode',
       );

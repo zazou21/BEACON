@@ -39,52 +39,6 @@ lib/
 
 ---
 
-## 🧠 ViewModels (Business Logic)
-
-This project uses a simple MVVM-style approach where **Screens** render UI and delegate state + actions to **ViewModels**. ViewModels are responsible for:
-- Holding screen state (loading flags, selected tabs, discovered devices/clusters, chat messages, etc.)
-- Coordinating async flows (initialization, DB reads/writes, Nearby messaging)
-- Exposing a clean API to the UI via `ChangeNotifier` (so widgets can rebuild via `Provider`/`Consumer`)
-
-In the UI layer, ViewModels are typically wired using `ChangeNotifierProvider` and `Consumer` (see the screen implementations in `lib/screens/`).
-
-### ViewModel responsibilities (by file)
-
-- `lib/viewmodels/dashboard_view_model.dart` (**DashboardViewModel**)
-   - Orchestrates **Nearby Connections** in either `initiator` or `joiner` mode.
-   - Initiator flow: creates/loads the current cluster, tracks available devices, and invites devices to join.
-   - Joiner flow: tracks discovered clusters, joins a selected cluster, accepts/rejects invites, and loads cluster members.
-   - Convenience actions: quick-message sending, broadcast messaging, navigation helpers to chat, and a `stopAll()` reset.
-
-- `lib/viewmodels/chat_view_model.dart` (**ChatViewModel**)
-   - Supports **private chats** (device-to-device) and **group chats** (cluster chat).
-   - Loads chat + participants from the local DB (repositories) and keeps UI updated.
-   - Sends messages through Nearby (`sendChatMessage` / `broadcastChatMessage`) and persists messages to the DB.
-   - Refresh strategy:
-      - Reacts to Nearby state updates (device presence / cluster membership)
-      - Periodically refreshes messages from the DB (polling)
-
-- `lib/viewmodels/resource_viewmodel.dart` (**ResourceViewModel**)
-   - Drives the Resources screen state (selected category tab, loading flag, recent activity list).
-   - Initializes Nearby (initiator/joiner) based on the persisted `dashboard_mode` and loads current resources/devices.
-   - Posts/requests resources, persists them via the repository, and broadcasts resource updates to connected devices.
-   - Listens for resource updates via `Resource.resourceUpdateStream` and refreshes UI when the stream emits.
-
-- `lib/viewmodels/profile_view_model.dart` (**ProfileViewModel**)
-   - Loads and saves the user profile via `ProfileRepository`.
-   - Exposes `currentProfile`, `isSaved`, and a `savedData` map for display.
-   - Used by the Profile screen to persist onboarding/profile changes.
-
-### Dependency injection (testability)
-
-Most ViewModels support injecting repositories/services (or create sensible defaults). This makes unit/integration testing easier because tests can provide fakes/mocks:
-- `ChatViewModel(...)` accepts repositories + an optional Nearby implementation.
-- `ResourceViewModel(...)` accepts an optional `ResourceRepository`, `DBService`, and `NearbyConnectionsBase`.
-- `DashboardViewModel(...)` is constructed with repositories and chooses the correct Nearby implementation based on mode.
-- `ProfileViewModel(...)` is constructed with a `ProfileRepository` (the screen may inject a real implementation).
-
----
-
 ## 🛠️ How to Run (for UI test)  
 1. Clone the repository:  
    ```bash

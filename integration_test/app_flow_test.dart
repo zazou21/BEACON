@@ -9,12 +9,6 @@ import 'helpers/test_helpers.dart';
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  // IMPORTANT: Integration tests on real devices should run as a SINGLE test
-  // because:
-  // 1. app.main() can only be called ONCE per test run
-  // 2. Permission dialogs block subsequent permission requests
-  // 3. Platform services (notifications, nearby) persist state
-
   testWidgets('Complete App Navigation Flow', (tester) async {
     // Setup initial state: Not logged in
     SharedPreferences.setMockInitialValues({
@@ -32,13 +26,10 @@ void main() {
     // ============================================
     print('[TEST] Checking landing page...');
     
-    // Look for landing page elements
     final beaconTitle = find.text('BEACON');
     final joinButton = find.text('Join Existing Communication');
     final startButton = find.text('Start New Communication');
 
-    // The app might be on landing or might have redirected
-    // Let's check what's visible
     if (beaconTitle.evaluate().isNotEmpty) {
       print('[TEST] ✓ Found BEACON title');
     }

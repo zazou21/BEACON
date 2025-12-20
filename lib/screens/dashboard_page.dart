@@ -340,7 +340,7 @@ class _DashboardPageState extends State<DashboardPage> {
     await prefs.remove('dashboard_mode');
 
     if (context.mounted) {
-      context.go('/');
+      context.go('/?force=true');
     }
   }
 
@@ -675,8 +675,13 @@ class _DashboardPageState extends State<DashboardPage> {
                                     Icons.exit_to_app,
                                     color: Colors.redAccent,
                                   ),
-                                  onPressed: () =>
-                                      viewModel.disconnectFromCluster(),
+                                  onPressed: () async {
+                                    await viewModel.disconnectFromCluster();
+                                    if (context.mounted) {
+                                      await viewModel.clearSavedMode();
+                                      context.go('/?force=true');
+                                    }
+                                  },
                                   tooltip: "Leave",
                                 ),
                               ],

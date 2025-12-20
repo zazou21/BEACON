@@ -6,22 +6,29 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 class VoiceCommandWidget extends StatefulWidget {
   final VoidCallback? toggleTheme;
   final bool? buttonMode;
+  final dynamic
+  speechToText; // Accept any speech-to-text implementation (real or mock)
 
-  const VoiceCommandWidget({super.key, this.toggleTheme, this.buttonMode});
+  const VoiceCommandWidget({
+    super.key,
+    this.toggleTheme,
+    this.buttonMode,
+    this.speechToText,
+  });
 
   @override
   State<VoiceCommandWidget> createState() => _VoiceCommandWidgetState();
 }
 
 class _VoiceCommandWidgetState extends State<VoiceCommandWidget> {
-  late stt.SpeechToText _speech;
+  late dynamic _speech;
   bool _isListening = false;
   String _lastWords = "";
 
   @override
   void initState() {
     super.initState();
-    _speech = stt.SpeechToText();
+    _speech = widget.speechToText ?? stt.SpeechToText();
     _initSpeech();
   }
 
@@ -87,37 +94,29 @@ class _VoiceCommandWidgetState extends State<VoiceCommandWidget> {
   @override
   Widget build(BuildContext context) {
     if (widget.buttonMode == true) {
-    return Column(
-      children: [
-        Text(
-          _isListening ? "Listening…" : "Tap mic for voice commands",
-          style: const TextStyle(fontSize: 12),
-        ),
-        const SizedBox(height: 6),
-        GestureDetector(
-          onTap: _isListening ? _stopListening : _startListening,
-          child: Icon(
-            _isListening ? Icons.mic : Icons.mic_none,
-            size: 30,
-            color: _isListening ? Colors.red : Colors.grey,
+      return Column(
+        children: [
+          Text(
+            _isListening ? "Listening…" : "Tap mic for voice commands",
+            style: const TextStyle(fontSize: 12),
           ),
-        ),
-      ],
-    );
+          const SizedBox(height: 6),
+          GestureDetector(
+            onTap: _isListening ? _stopListening : _startListening,
+            child: Icon(
+              _isListening ? Icons.mic : Icons.mic_none,
+              size: 30,
+              color: _isListening ? Colors.red : Colors.grey,
+            ),
+          ),
+        ],
+      );
+    } else {
+      return FloatingActionButton(
+        onPressed: _isListening ? _stopListening : _startListening,
+        backgroundColor: _isListening ? Colors.red : Colors.blue,
+        child: Icon(_isListening ? Icons.mic : Icons.mic_none),
+      );
+    }
   }
-
-  else{
-    return FloatingActionButton(
-      onPressed: _isListening ? _stopListening : _startListening,
-      backgroundColor: _isListening ? Colors.red : Colors.blue,
-      child: Icon(_isListening ? Icons.mic : Icons.mic_none),
-    );
-
-  }
-}
-
-
-
-
-
 }

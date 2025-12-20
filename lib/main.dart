@@ -14,9 +14,116 @@ import 'services/db_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:beacon_project/models/dashboard_mode.dart';
 import 'package:beacon_project/services/nearby_connections/nearby_connections.dart';
+import 'package:beacon_project/services/notification_service.dart';
 
-void main() {
+// Global navigation key for navigation without context
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+// Global variable to store pending navigation from notifications
+String? _pendingChatNavigation;
+
+// Global login state - loaded before router creation
+bool _isLoggedIn = false;
+
+// Function to update login state from other files
+void setLoggedIn(bool value) {
+  _isLoggedIn = value;
+  print('[Main] _isLoggedIn updated to: $value');
+}
+
+// Global pending dashboard mode - set when user chooses before setup
+String _pendingDashboardMode = 'joiner';
+
+// Global saved dashboard mode - loaded from prefs
+String _savedDashboardMode = 'joiner';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize notification service
+  await NotificationService().initialize();
+
+  // Setup notification tap handler
+  NotificationService.onNotificationTapped = (String deviceUuid) {
+    _pendingChatNavigation = deviceUuid;
+    _handleNotificationNavigation();
+  };
+
+  // Setup snackbar handler for foreground messages
+  NotificationService.onShowSnackbar = (String deviceName, String message) {
+    if (navigatorKey.currentContext != null) {
+      ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
+        SnackBar(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                deviceName,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                message,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+          backgroundColor: const Color.fromARGB(255, 10, 51, 85),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+  };
+  final prefs = await SharedPreferences.getInstance();
+  _isLoggedIn = prefs.getBool('is_logged_in') ?? false;
+  _savedDashboardMode = prefs.getString('dashboard_mode') ?? 'joiner';
+  print(
+    '[Main] Loaded is_logged_in: $_isLoggedIn, dashboard_mode: $_savedDashboardMode',
+  );
+
   runApp(const BeaconApp());
+}
+
+/// Navigate to chat page when notification is tapped
+void _handleNotificationNavigation() {
+  if (_pendingChatNavigation != null && navigatorKey.currentContext != null) {
+    final deviceUuid = _pendingChatNavigation!;
+    _pendingChatNavigation = null;
+
+    // Get the appropriate beacon instance
+    _getBeaconInstance().then((beacon) {
+      if (beacon != null && navigatorKey.currentContext != null) {
+        Navigator.of(navigatorKey.currentContext!).push(
+          MaterialPageRoute(
+            builder: (context) =>
+                ChatPage(deviceUuid: deviceUuid, nearby: beacon),
+          ),
+        );
+      }
+    });
+  }
+}
+
+/// Get the appropriate beacon singleton instance based on saved mode
+Future<NearbyConnectionsBase?> _getBeaconInstance() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final modeStr = prefs.getString('dashboard_mode') ?? 'joiner';
+    final isInitiator = modeStr == 'initiator';
+
+    return isInitiator
+        ? NearbyConnectionsInitiator()
+        : NearbyConnectionsJoiner();
+  } catch (e) {
+    debugPrint('[Navigation] Error getting beacon instance: $e');
+    return null;
+  }
 }
 
 class BeaconApp extends StatefulWidget {
@@ -28,7 +135,7 @@ class BeaconApp extends StatefulWidget {
 
 class _BeaconAppState extends State<BeaconApp> with WidgetsBindingObserver {
   bool isDarkMode = false;
-  NearbyConnectionsBase? _beacon;
+  String mode = 'joiner';
 
   @override
   void initState() {
@@ -44,19 +151,23 @@ class _BeaconAppState extends State<BeaconApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Update notification service about app lifecycle
+    NotificationService().updateAppLifecycleState(state);
+
     if (state == AppLifecycleState.paused) {
       print('[App Lifecycle] App paused - marking offline');
       _markOffline();
     } else if (state == AppLifecycleState.resumed) {
       print('[App Lifecycle] App resumed - marking online');
       _markOnline();
+      // Check for pending notification navigation
+      _handleNotificationNavigation();
     }
   }
 
   void _markOffline() async {
     if (mounted) {
       try {
-        // Get the saved dashboard mode to determine which beacon instance to use
         final prefs = await SharedPreferences.getInstance();
         final modeStr = prefs.getString('dashboard_mode') ?? 'joiner';
         final isInitiator = modeStr == 'initiator';
@@ -64,7 +175,6 @@ class _BeaconAppState extends State<BeaconApp> with WidgetsBindingObserver {
           '[_markOffline] Dashboard mode: $modeStr, isInitiator: $isInitiator',
         );
 
-        // Get the appropriate beacon singleton instance
         final beacon = isInitiator
             ? NearbyConnectionsInitiator()
             : NearbyConnectionsJoiner();
@@ -85,7 +195,6 @@ class _BeaconAppState extends State<BeaconApp> with WidgetsBindingObserver {
   void _markOnline() async {
     if (mounted) {
       try {
-        // Get the saved dashboard mode to determine which beacon instance to use
         final prefs = await SharedPreferences.getInstance();
         final modeStr = prefs.getString('dashboard_mode') ?? 'joiner';
         final isInitiator = modeStr == 'initiator';
@@ -93,7 +202,6 @@ class _BeaconAppState extends State<BeaconApp> with WidgetsBindingObserver {
           '[_markOnline] Dashboard mode: $modeStr, isInitiator: $isInitiator',
         );
 
-        // Get the appropriate beacon singleton instance
         final beacon = isInitiator
             ? NearbyConnectionsInitiator()
             : NearbyConnectionsJoiner();
@@ -127,12 +235,72 @@ class _BeaconAppState extends State<BeaconApp> with WidgetsBindingObserver {
 }
 
 final GoRouter _router = GoRouter(
+  navigatorKey: navigatorKey, // Add global key for navigation without context
   initialLocation: '/',
+  redirect: (context, state) {
+    final matchedLoc = state.matchedLocation;
+    final fullLoc = state.uri.toString();
+
+    print('[Router Redirect] matchedLocation: $matchedLoc');
+    print('[Router Redirect] fullUri: $fullLoc');
+    print('[Router Redirect] is_logged_in (cached): $_isLoggedIn');
+    print('[Router Redirect] savedDashboardMode: $_savedDashboardMode');
+
+    final isProtectedRoute =
+        matchedLoc.contains('/dashboard') ||
+        matchedLoc.contains('/chat') ||
+        matchedLoc.contains('/resources');
+
+    // Allow access to landing if explicitly requested (force=true)
+    final forceParam = state.uri.queryParameters['force'];
+    final forceLanding = forceParam == 'true';
+
+    // If logged in and on landing page (without force), redirect to dashboard
+    if (_isLoggedIn && matchedLoc == '/' && !forceLanding) {
+      print(
+        '[Router Redirect] REDIRECTING to /dashboard?mode=$_savedDashboardMode',
+      );
+      return '/dashboard?mode=$_savedDashboardMode';
+    }
+
+    // If not logged in and trying to access protected route, redirect to setup page
+    if (!_isLoggedIn && isProtectedRoute) {
+      print('[Router Redirect] REDIRECTING to /setup');
+      return '/setup';
+    }
+
+    print('[Router Redirect] No redirect needed');
+    return null; // No redirect needed
+  },
   routes: [
     GoRoute(
       path: '/',
       name: 'landing',
       builder: (context, state) => const LandingPage(),
+    ),
+
+    GoRoute(
+      path: '/chat',
+      name: 'chat',
+      builder: (context, state) {
+        final deviceUuid = state.uri.queryParameters['deviceUuid'];
+        final clusterId = state.uri.queryParameters['clusterId'];
+        final isGroupChat = clusterId != null;
+        return ChatPage(
+          deviceUuid: deviceUuid,
+          clusterId: clusterId,
+          isGroupChat: isGroupChat,
+        );
+      },
+    ),
+
+    // Top-level setup route for first-time profile setup (no bottom nav)
+    GoRoute(
+      path: '/setup',
+      name: 'setup',
+      builder: (context, state) {
+        return const UserProfilePage(isFirstTime: true);
+      },
     ),
 
     // ShellRoute provides a persistent scaffold with BottomNavigationBar
@@ -145,7 +313,6 @@ final GoRouter _router = GoRouter(
           path: '/dashboard',
           name: 'dashboard',
           builder: (context, state) {
-            // Parse mode from query parameters
             final modeParam = state.uri.queryParameters['mode'] ?? 'browse';
             print('[Router] Dashboard mode param: $modeParam');
             late final DashboardMode mode;
@@ -154,17 +321,11 @@ final GoRouter _router = GoRouter(
             } else if (modeParam == 'initiator') {
               mode = DashboardMode.initiator;
             } else {
-              mode = DashboardMode.joiner; // default fallback
+              mode = DashboardMode.joiner;
             }
             return DashboardPage(mode: mode);
           },
         ),
-
-        // GoRoute(
-        //   path: '/chat',
-        //   name: 'chat',
-        //   builder: (context, state) => ChatPage( ''),
-        // ),
         GoRoute(
           path: '/resources',
           name: 'resources',
@@ -173,13 +334,8 @@ final GoRouter _router = GoRouter(
         GoRoute(
           path: '/profile',
           name: 'profile',
-          builder: (context, state) => const UserProfilePage(),
-        ),
-        // route to landing
-        GoRoute(
-          path: '/',
-          name: ' ',
-          builder: (context, state) => const LandingPage(),
+          builder: (context, state) =>
+              const UserProfilePage(isFirstTime: false),
         ),
       ],
     ),
@@ -194,7 +350,6 @@ class ThemeToggleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Find the BeaconApp state to toggle the theme
     final appState = context.findAncestorStateOfType<_BeaconAppState>();
     final isDark =
         appState?.isDarkMode ?? Theme.of(context).brightness == Brightness.dark;
@@ -230,11 +385,9 @@ void onFlush() async {
   await db.delete('devices');
   await db.delete('clusters');
   await db.delete('cluster_members');
+  await db.delete('chat');
+  await db.delete('chat_message');
 }
-
-// ---------------------------
-// DB Flush Button
-// ---------------------------
 
 // ---------------------------
 // Landing Page
@@ -242,34 +395,47 @@ void onFlush() async {
 class LandingPage extends StatelessWidget {
   const LandingPage({super.key});
 
-  void _startNew(BuildContext context) {
-    // Navigate to chat in "start" mode
-    // Navigate to dashboard in "initiator" mode
-    context.go('/dashboard?mode=initiator');
+  void _startNew(BuildContext context) async {
+    final prefs = await SharedPreferences.getInstance();
+    final isLoggedIn = prefs.getBool('is_logged_in');
+    if (isLoggedIn == true) {
+      context.go('/dashboard?mode=initiator');
+    } else {
+      // Save pending mode for after profile setup
+      _pendingDashboardMode = 'initiator';
+      await prefs.setString('dashboard_mode', 'initiator');
+      context.go('/setup');
+    }
   }
 
-  void _joinExisting(BuildContext context) {
-    // Navigate to dashboard in "joiner" mode
-    context.go('/dashboard?mode=joiner');
+  void _joinExisting(BuildContext context) async {
+    final prefs = await SharedPreferences.getInstance();
+    final isLoggedIn = prefs.getBool('is_logged_in');
+    if (isLoggedIn == true) {
+      context.go('/dashboard?mode=joiner');
+    } else {
+      // Save pending mode for after profile setup
+      _pendingDashboardMode = 'joiner';
+      await prefs.setString('dashboard_mode', 'joiner');
+      context.go('/setup');
+    }
   }
 
   Future<void> deleteSavedDashboardMode() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('dashboard_mode');
+    await prefs.setBool('is_logged_in', false);
+    _isLoggedIn = false; // Update global cached value
+    print('[LandingPage] Reset is_logged_in to false');
   }
 
   @override
   Widget build(BuildContext context) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      deleteSavedDashboardMode();
-    });
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('BEACON'),
         centerTitle: true,
         actions: const [
-          // Theme toggle in Landing AppBar
           ThemeToggleButton(),
           DbFlushButton(onFlush: onFlush),
         ],
@@ -396,7 +562,7 @@ class LandingPage extends StatelessWidget {
 }
 
 // ---------------------------
-// HomeShell with Bottom Navigation
+// HomeShell with Bottom Navigation (Chat tab removed)
 // ---------------------------
 class HomeShell extends StatefulWidget {
   final Widget child;
@@ -410,16 +576,6 @@ class _HomeShellState extends State<HomeShell> {
   Future<DashboardMode?> getSavedDashboardMode() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString('dashboard_mode');
-    ResourceViewModel? resourceViewModel;
-    DashboardViewModel? dashboardViewModel;
-
-    void setResourceViewModel(ResourceViewModel vm) {
-      resourceViewModel = vm;
-    }
-
-    void setDashboardViewModel(DashboardViewModel vm) {
-      dashboardViewModel = vm;
-    }
 
     if (saved == null) return null;
     return DashboardMode.values.firstWhere(
@@ -428,20 +584,19 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
+  // Updated mapping - Chat tab removed (only 4 items now)
   final Map<String, int> _locationToIndex = {
     '/dashboard': 0,
-    '/chat': 1,
-    '/resources': 2,
-    '/profile': 3,
-    '/': 4,
+    '/resources': 1,
+    '/profile': 2,
+    '/': 3,
   };
 
   final Map<int, String> _indexToTitle = {
     0: 'Dashboard',
-    1: 'Chat',
-    2: 'Resources',
-    3: 'Profile',
-    4: 'Landing',
+    1: 'Resources',
+    2: 'Profile',
+    3: 'Landing',
   };
 
   int _currentIndex = 0;
@@ -455,16 +610,13 @@ class _HomeShellState extends State<HomeShell> {
         context.go('/dashboard?mode=${mode?.name ?? 'joiner'}');
         break;
       case 1:
-        context.go('/chat');
-        break;
-      case 2:
         context.go('/resources');
         break;
-      case 3:
+      case 2:
         context.go('/profile');
         break;
-      case 4:
-        context.go('/');
+      case 3:
+        context.go('/?force=true');
         break;
     }
   }
@@ -505,10 +657,7 @@ class _HomeShellState extends State<HomeShell> {
       ),
       body: Stack(
         children: [
-          // The actual page content
           widget.child,
-
-          // Small voice button above the bottom navigation bar
           Positioned(
             right: 16,
             bottom: kBottomNavigationBarHeight + 6,
@@ -525,7 +674,6 @@ class _HomeShellState extends State<HomeShell> {
             icon: Icon(Icons.dashboard),
             label: 'Dashboard',
           ),
-          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble), label: 'Chat'),
           BottomNavigationBarItem(
             icon: Icon(Icons.local_hospital),
             label: 'Resources',

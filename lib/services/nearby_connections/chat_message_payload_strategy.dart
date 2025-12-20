@@ -22,9 +22,9 @@ class ChatMessagePayloadStrategy implements PayloadStrategy {
   Future<void> handle(String endpointId, Map<String, dynamic> data) async {
     print('ChatMessage: Received from $endpointId: $data');
 
-    final messageId = data['messageid'] as String?;
-    final chatId = data['chatid'] as String?;
-    final senderUuid = data['senderuuid'] as String?;
+    final messageId = data['message_id'] as String?;
+    final chatId = data['chat_id'] as String?;
+    final senderUuid = data['sender_uuid'] as String?;
     final messageText = data['message'] as String?;
     final timestamp = data['timestamp'] as int?;
 

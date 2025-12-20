@@ -616,12 +616,18 @@ class NearbyConnectionsJoiner extends NearbyConnectionsBase {
   Future<void> stopAll() async {
     debugPrint("[Nearby]: stopping all for joiner");
 
+    print(_connectedEndpoints);
     await stopAdvertising();
     await stopDiscovery();
 
     for (final endpointId in List.of(_connectedEndpoints)) {
       await Nearby().disconnectFromEndpoint(endpointId);
     }
+
+    await Nearby().stopAllEndpoints();
+
+    _connectedEndpoints.clear();
+    _activeConnections.clear();
 
     _joinedCluster = null;
     _pendingConnections.clear();

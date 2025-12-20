@@ -114,7 +114,9 @@ class _VoiceCommandWidgetState extends State<VoiceCommandWidget> {
     } else {
       return FloatingActionButton(
         onPressed: _isListening ? _stopListening : _startListening,
-        backgroundColor: _isListening ? Colors.red : Colors.blue,
+        backgroundColor: _isListening
+            ? Colors.red
+            : const Color.fromARGB(255, 102, 131, 211),
         child: Icon(_isListening ? Icons.mic : Icons.mic_none),
       );
     }

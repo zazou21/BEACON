@@ -19,6 +19,21 @@ import 'package:beacon_project/services/notification_service.dart';
 // Global navigation key for navigation without context
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
+// Global key for showing SnackBars without context
+final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
+
+// Extension to get current location from GoRouter even in newer versions
+extension GoRouterLocationExt on GoRouter {
+  String get location {
+    final RouteMatch lastMatch = routerDelegate.currentConfiguration.last;
+    final RouteMatchList matchList = lastMatch is ImperativeRouteMatch
+        ? lastMatch.matches
+        : routerDelegate.currentConfiguration;
+    return matchList.uri.toString();
+  }
+}
+
 // Global variable to store pending navigation from notifications
 String? _pendingChatNavigation;
 
@@ -51,35 +66,49 @@ void main() async {
 
   // Setup snackbar handler for foreground messages
   NotificationService.onShowSnackbar = (String deviceName, String message) {
-    if (navigatorKey.currentContext != null) {
-      ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
-        SnackBar(
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                deviceName,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                message,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white),
-              ),
-            ],
-          ),
-          backgroundColor: const Color.fromARGB(255, 10, 51, 85),
-          duration: const Duration(seconds: 4),
-        ),
+    final messengerState = scaffoldMessengerKey.currentState;
+    if (messengerState == null) return;
+
+    // Determine current route using GoRouter
+    final currentLocation = _router.location;
+    if (currentLocation.startsWith('/chat')) {
+      print(
+        '[Snackbar] Suppressed on chat route ($currentLocation): '
+        '$deviceName -> $message',
       );
+      return;
     }
+
+    final context = messengerState.context;
+
+    messengerState.showSnackBar(
+      SnackBar(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              deviceName,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              message,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+        backgroundColor: const Color.fromARGB(255, 10, 51, 85),
+        duration: const Duration(seconds: 4),
+      ),
+    );
   };
+
   final prefs = await SharedPreferences.getInstance();
   _isLoggedIn = prefs.getBool('is_logged_in') ?? false;
   _savedDashboardMode = prefs.getString('dashboard_mode') ?? 'joiner';
@@ -101,8 +130,7 @@ void _handleNotificationNavigation() {
       if (beacon != null && navigatorKey.currentContext != null) {
         Navigator.of(navigatorKey.currentContext!).push(
           MaterialPageRoute(
-            builder: (context) =>
-                ChatPage(deviceUuid: deviceUuid, nearby: beacon),
+            builder: (context) => ChatPage(deviceUuid: deviceUuid),
           ),
         );
       }
@@ -230,6 +258,7 @@ class _BeaconAppState extends State<BeaconApp> with WidgetsBindingObserver {
       theme: currentTheme,
       routerConfig: _router,
       debugShowCheckedModeBanner: false,
+      scaffoldMessengerKey: scaffoldMessengerKey,
     );
   }
 }
@@ -286,6 +315,7 @@ final GoRouter _router = GoRouter(
         final deviceUuid = state.uri.queryParameters['deviceUuid'];
         final clusterId = state.uri.queryParameters['clusterId'];
         final isGroupChat = clusterId != null;
+
         return ChatPage(
           deviceUuid: deviceUuid,
           clusterId: clusterId,
@@ -293,7 +323,6 @@ final GoRouter _router = GoRouter(
         );
       },
     ),
-
     // Top-level setup route for first-time profile setup (no bottom nav)
     GoRoute(
       path: '/setup',

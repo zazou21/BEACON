@@ -43,7 +43,9 @@ class _VoiceCommandWidgetState extends State<VoiceCommandWidget> {
       return;
     }
 
-    setState(() {}); // optional, just to rebuild if needed
+    if (mounted) {
+      setState(() {}); // optional, just to rebuild if needed
+    }
   }
 
   // Start listening

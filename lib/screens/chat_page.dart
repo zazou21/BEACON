@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:beacon_project/viewmodels/chat_view_model.dart';
 import 'package:beacon_project/services/nearby_connections/nearby_connections.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ChatPage extends StatefulWidget {
   final String? deviceUuid; // nullable for group chat
@@ -63,11 +64,13 @@ class _ChatPageState extends State<ChatPage> {
           backgroundColor: const Color.fromARGB(255, 10, 51, 85),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () {
+            onPressed: () async {
               if (context.canPop()) {
                 context.pop();
               } else {
-                context.go('/dashboard');
+                 final prefs = await SharedPreferences.getInstance();
+                final mode = prefs.getString('dashboard_mode') ?? 'joiner';
+                context.go('/dashboard?mode=$mode');
               }
             },
           ),

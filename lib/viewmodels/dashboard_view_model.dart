@@ -1,6 +1,7 @@
 // lib/view_models/dashboard_view_model.dart
 import 'package:beacon_project/models/chat_message.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:beacon_project/services/nearby_connections/nearby_connections.dart';
 import 'package:beacon_project/repositories/device_repository.dart';
 import 'package:beacon_project/repositories/cluster_repository.dart';
@@ -12,8 +13,6 @@ import 'package:beacon_project/models/dashboard_mode.dart';
 import 'package:beacon_project/repositories/chat_repository.dart';
 import 'package:beacon_project/repositories/chat_message_repository.dart';
 import 'package:uuid/uuid.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:beacon_project/screens/chat_page.dart';
 
 class DashboardViewModel extends ChangeNotifier {
   final DashboardMode mode;
@@ -380,28 +379,12 @@ class DashboardViewModel extends ChangeNotifier {
     return '${uuids[0]}_${uuids[1]}';
   }
 
-  // In dashboard_page.dart or dashboard_view_model.dart
   void navigateToGroupChat(BuildContext context, String clusterId) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) =>
-            ChatPage(clusterId: clusterId, isGroupChat: true, nearby: nearby),
-      ),
-    );
+    context.go('/chat?clusterId=$clusterId&isGroupChat=true');
   }
 
   void navigateToPrivateChat(BuildContext context, String deviceUuid) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ChatPage(
-          deviceUuid: deviceUuid,
-          isGroupChat: false,
-          nearby: nearby,
-        ),
-      ),
-    );
+    context.go('/chat?deviceUuid=$deviceUuid&isGroupChat=false');
   }
 
   @override

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:beacon_project/repositories/profile_repository.dart';
 import 'package:beacon_project/models/profile_model.dart';
+import 'package:path/path.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:go_router/go_router.dart';
 
 class ProfileViewModel extends ChangeNotifier {
   final ProfileRepository _profileRepository;
@@ -34,6 +37,8 @@ class ProfileViewModel extends ChangeNotifier {
   }
 
   Future<void> saveProfile(ProfileModel profile) async {
+    final prefs = await SharedPreferences.getInstance();
+   
     await _profileRepository.insertProfile(profile);
     _currentProfile = profile;
     _isSaved = true;
@@ -44,6 +49,8 @@ class ProfileViewModel extends ChangeNotifier {
       "Emergency Contact Number": profile.emergencyPhone,
       "Location": profile.location ?? "Not Provided",
     };
+    await prefs.setBool('is_profile_saved', true);
+    
     notifyListeners();
   }
 

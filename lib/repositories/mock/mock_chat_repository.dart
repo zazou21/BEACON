@@ -19,7 +19,7 @@ class MockChatRepository implements ChatRepository {
     if (mockChats == null) return null;
     try {
       return mockChats!.firstWhere(
-        (chat) => chat.deviceUuid.contains(deviceUuid),
+        (chat) => chat.deviceUuid!.contains(deviceUuid),
       );
     } catch (e) {
       return null;

@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:beacon_project/models/profile_model.dart';
 import 'package:beacon_project/viewmodels/profile_view_model.dart';
 import 'package:beacon_project/repositories/mock/mock_profile_repository.dart';
+import 'package:path/path.dart';
 
 void main() {
   group('ProfileViewModel', () {

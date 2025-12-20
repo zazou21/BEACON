@@ -249,8 +249,7 @@ class ResourcePage extends StatelessWidget {
                       context,
                       MaterialPageRoute(
                         builder: (context) => ChatPage(
-                          deviceUuid: owner.uuid,
-                          nearby:viewModel!.beacon!,
+                          deviceUuid: owner.uuid,   
                         ),
                       ),
                     );

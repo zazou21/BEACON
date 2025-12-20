@@ -22,6 +22,21 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // Global variable to store pending navigation from notifications
 String? _pendingChatNavigation;
 
+// Global login state - loaded before router creation
+bool _isLoggedIn = false;
+
+// Function to update login state from other files
+void setLoggedIn(bool value) {
+  _isLoggedIn = value;
+  print('[Main] _isLoggedIn updated to: $value');
+}
+
+// Global pending dashboard mode - set when user chooses before setup
+String _pendingDashboardMode = 'joiner';
+
+// Global saved dashboard mode - loaded from prefs
+String _savedDashboardMode = 'joiner';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -34,6 +49,42 @@ void main() async {
     _handleNotificationNavigation();
   };
 
+  // Setup snackbar handler for foreground messages
+  NotificationService.onShowSnackbar = (String deviceName, String message) {
+    if (navigatorKey.currentContext != null) {
+      ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
+        SnackBar(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                deviceName,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                message,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+          backgroundColor: const Color.fromARGB(255, 10, 51, 85),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+  };
+  final prefs = await SharedPreferences.getInstance();
+  _isLoggedIn = prefs.getBool('is_logged_in') ?? false;
+  _savedDashboardMode = prefs.getString('dashboard_mode') ?? 'joiner';
+  print('[Main] Loaded is_logged_in: $_isLoggedIn, dashboard_mode: $_savedDashboardMode');
+  
   runApp(const BeaconApp());
 }
 
@@ -82,7 +133,8 @@ class BeaconApp extends StatefulWidget {
 
 class _BeaconAppState extends State<BeaconApp> with WidgetsBindingObserver {
   bool isDarkMode = false;
-  NearbyConnectionsBase? _beacon;
+  String mode = 'joiner';
+  
 
   @override
   void initState() {
@@ -98,6 +150,9 @@ class _BeaconAppState extends State<BeaconApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Update notification service about app lifecycle
+    NotificationService().updateAppLifecycleState(state);
+
     if (state == AppLifecycleState.paused) {
       print('[App Lifecycle] App paused - marking offline');
       _markOffline();
@@ -181,11 +236,68 @@ class _BeaconAppState extends State<BeaconApp> with WidgetsBindingObserver {
 final GoRouter _router = GoRouter(
   navigatorKey: navigatorKey, // Add global key for navigation without context
   initialLocation: '/',
+  redirect: (context, state) {
+    final matchedLoc = state.matchedLocation;
+    final fullLoc = state.uri.toString();
+    
+    print('[Router Redirect] matchedLocation: $matchedLoc');
+    print('[Router Redirect] fullUri: $fullLoc');
+    print('[Router Redirect] is_logged_in (cached): $_isLoggedIn');
+    print('[Router Redirect] savedDashboardMode: $_savedDashboardMode');
+    
+    final isProtectedRoute = matchedLoc.contains('/dashboard') ||
+        matchedLoc.contains('/chat') ||
+        matchedLoc.contains('/resources');
+    
+    // Allow access to landing if explicitly requested (force=true)
+    final forceParam = state.uri.queryParameters['force'];
+    final forceLanding = forceParam == 'true';
+    
+    // If logged in and on landing page (without force), redirect to dashboard
+    if (_isLoggedIn && matchedLoc == '/' && !forceLanding) {
+      print('[Router Redirect] REDIRECTING to /dashboard?mode=$_savedDashboardMode');
+      return '/dashboard?mode=$_savedDashboardMode';
+    }
+    
+    // If not logged in and trying to access protected route, redirect to setup page
+    if (!_isLoggedIn && isProtectedRoute) {
+      print('[Router Redirect] REDIRECTING to /setup');
+      return '/setup';
+    }
+    
+    print('[Router Redirect] No redirect needed');
+    return null; // No redirect needed
+  },
   routes: [
     GoRoute(
       path: '/',
       name: 'landing',
       builder: (context, state) => const LandingPage(),
+    ),
+
+    
+    GoRoute(
+      path: '/chat',
+      name: 'chat',
+      builder: (context, state) {
+        final deviceUuid = state.uri.queryParameters['deviceUuid'];
+        final clusterId = state.uri.queryParameters['clusterId'];
+        final isGroupChat = clusterId != null;
+        return ChatPage(
+          deviceUuid: deviceUuid,
+          clusterId: clusterId,
+          isGroupChat: isGroupChat,
+        );
+      },
+    ),
+
+    // Top-level setup route for first-time profile setup (no bottom nav)
+    GoRoute(
+      path: '/setup',
+      name: 'setup',
+      builder: (context, state) {
+        return const UserProfilePage(isFirstTime: true);
+      },
     ),
 
     // ShellRoute provides a persistent scaffold with BottomNavigationBar
@@ -219,7 +331,7 @@ final GoRouter _router = GoRouter(
         GoRoute(
           path: '/profile',
           name: 'profile',
-          builder: (context, state) => const UserProfilePage(),
+          builder: (context, state) => const UserProfilePage(isFirstTime: false),
         ),
       ],
     ),
@@ -270,7 +382,7 @@ void onFlush() async {
   await db.delete('clusters');
   await db.delete('cluster_members');
   await db.delete('chat');
-  await db.delete('chat_messages');
+  await db.delete('chat_message');
 }
 
 // ---------------------------
@@ -279,25 +391,42 @@ void onFlush() async {
 class LandingPage extends StatelessWidget {
   const LandingPage({super.key});
 
-  void _startNew(BuildContext context) {
-    context.go('/dashboard?mode=initiator');
+  void _startNew(BuildContext context) async {
+    final prefs = await SharedPreferences.getInstance();
+    final isLoggedIn = prefs.getBool('is_logged_in');
+    if (isLoggedIn == true) {
+      context.go('/dashboard?mode=initiator');
+    } else {
+      // Save pending mode for after profile setup
+      _pendingDashboardMode = 'initiator';
+      await prefs.setString('dashboard_mode', 'initiator');
+      context.go('/setup');
+    }
   }
 
-  void _joinExisting(BuildContext context) {
-    context.go('/dashboard?mode=joiner');
+  void _joinExisting(BuildContext context) async {
+    final prefs = await SharedPreferences.getInstance();
+    final isLoggedIn = prefs.getBool('is_logged_in');
+    if (isLoggedIn == true) {
+      context.go('/dashboard?mode=joiner');
+    } else {
+      // Save pending mode for after profile setup
+      _pendingDashboardMode = 'joiner';
+      await prefs.setString('dashboard_mode', 'joiner');
+      context.go('/setup');
+    }
   }
 
   Future<void> deleteSavedDashboardMode() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('dashboard_mode');
+    await prefs.setBool('is_logged_in', false);
+    _isLoggedIn = false; // Update global cached value
+    print('[LandingPage] Reset is_logged_in to false');
   }
 
   @override
   Widget build(BuildContext context) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      deleteSavedDashboardMode();
-    });
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('BEACON'),
@@ -483,7 +612,7 @@ class _HomeShellState extends State<HomeShell> {
         context.go('/profile');
         break;
       case 3:
-        context.go('/');
+        context.go('/?force=true');
         break;
     }
   }

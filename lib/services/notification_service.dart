@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+
 class NotificationService {
   // ─────────────────────────────────────────────────────────────
   // Singleton
@@ -16,8 +17,14 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
 
+  /// Track app lifecycle state
+  AppLifecycleState _appLifecycleState = AppLifecycleState.resumed;
+
   /// Callback when user taps a notification
   static void Function(String payload)? onNotificationTapped;
+
+  /// Callback to show snackbar when app is foreground
+  static void Function(String deviceName, String message)? onShowSnackbar;
 
   // ─────────────────────────────────────────────────────────────
   // Initialization
@@ -65,13 +72,31 @@ class NotificationService {
   }
 
   // ─────────────────────────────────────────────────────────────
+  // App Lifecycle
+  // ─────────────────────────────────────────────────────────────
+  void updateAppLifecycleState(AppLifecycleState state) {
+    _appLifecycleState = state;
+  }
+
+  bool get isAppInForeground =>
+      _appLifecycleState == AppLifecycleState.resumed;
+
+  // ─────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
   // Chat Notification
   // ─────────────────────────────────────────────────────────────
   Future<void> showChatNotification({
     required String deviceUuid,
     required String deviceName,
     required String message,
+    String?  clusterId,
   }) async {
+    // If app is in foreground, show snackbar instead of system notification
+    if (isAppInForeground) {
+      onShowSnackbar?.call(deviceName, message);
+      return;
+    }
+
     const androidDetails = AndroidNotificationDetails(
       'chat_messages', // channel id
       'Chat Messages', // channel name

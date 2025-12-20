@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../main.dart' show setLoggedIn;
 import '../repositories/profile_repository.dart';
 import '../repositories/profile_repository_impl.dart';
 import '../services/db_service.dart';
@@ -103,15 +105,27 @@ class _UserProfilePageState extends State<UserProfilePage> {
         };
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('✔ Profile Saved Successfully!'),
-          backgroundColor: Theme.of(context).colorScheme.primary,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('✔ Profile Saved Successfully!'),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+          ),
+        );
 
-      if (widget.isFirstTime) {
-        context.go('/dashboard');
+        if (widget.isFirstTime) {
+          // Get saved dashboard mode and navigate
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('is_logged_in', true);
+          setLoggedIn(true); // Update global cached state
+          final mode = prefs.getString('dashboard_mode') ?? 'joiner';
+          print('[Profile] is_logged_in set to true');
+          print('[Profile] Navigating to dashboard with mode: $mode');
+          
+          if (mounted) {
+            context.go('/dashboard?mode=$mode');
+          }
+        }
       }
     }
   }

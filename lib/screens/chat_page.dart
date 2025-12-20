@@ -1,26 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:beacon_project/viewmodels/chat_view_model.dart';
-import 'package:beacon_project/repositories/chat_repository_impl.dart';
-import 'package:beacon_project/repositories/chat_message_repository_impl.dart';
-import 'package:beacon_project/repositories/device_repository_impl.dart';
-import 'package:beacon_project/repositories/cluster_repository_impl.dart';
-import 'package:beacon_project/repositories/cluster_member_repository_impl.dart';
-import 'package:beacon_project/services/db_service.dart';
 import 'package:beacon_project/services/nearby_connections/nearby_connections.dart';
 
 class ChatPage extends StatefulWidget {
   final String? deviceUuid; // nullable for group chat
   final String? clusterId; // new parameter for group chat
   final bool isGroupChat; // flag to distinguish mode
-  final NearbyConnectionsBase nearby;
+  final NearbyConnectionsBase? nearby; // optional nearby connections
 
   const ChatPage({
     super.key,
     this.deviceUuid,
     this.clusterId,
     this.isGroupChat = false,
-    required this.nearby,
+    this.nearby,
   }) : assert(
          (deviceUuid != null && clusterId == null) ||
              (deviceUuid == null && clusterId != null),
@@ -38,13 +33,7 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void initState() {
     super.initState();
-    final dbService = DBService();
     _viewModel = ChatViewModel(
-      chatRepository: ChatRepositoryImpl(dbService),
-      chatMessageRepository: ChatMessageRepositoryImpl(dbService),
-      deviceRepository: DeviceRepositoryImpl(dbService),
-      clusterRepository: ClusterRepositoryImpl(dbService),
-      clusterMemberRepository: ClusterMemberRepositoryImpl(dbService),
       nearby: widget.nearby,
       deviceUuid: widget.deviceUuid,
       clusterId: widget.clusterId,
@@ -72,6 +61,16 @@ class _ChatPageState extends State<ChatPage> {
       child: Scaffold(
         appBar: AppBar(
           backgroundColor: const Color.fromARGB(255, 10, 51, 85),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/dashboard');
+              }
+            },
+          ),
           title: Consumer<ChatViewModel>(
             builder: (context, viewModel, child) {
               // Different title display for group vs private chat

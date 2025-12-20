@@ -1,4 +1,9 @@
 import 'package:beacon_project/repositories/chat_repository_impl.dart';
+import 'package:beacon_project/repositories/chat_message_repository_impl.dart';
+import 'package:beacon_project/repositories/device_repository_impl.dart';
+import 'package:beacon_project/repositories/cluster_repository_impl.dart';
+import 'package:beacon_project/repositories/cluster_member_repository_impl.dart';
+import 'package:beacon_project/services/db_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:beacon_project/models/chat.dart';
 import 'package:beacon_project/models/chat_message.dart';
@@ -16,12 +21,12 @@ import 'package:uuid/uuid.dart';
 import 'dart:async';
 
 class ChatViewModel extends ChangeNotifier {
-  final ChatRepository _chatRepository;
-  final ChatMessageRepository _chatMessageRepository;
-  final DeviceRepository _deviceRepository;
-  final ClusterRepository _clusterRepository;
-  final ClusterMemberRepository _clusterMemberRepository;
-  final NearbyConnectionsBase _nearby;
+  late final ChatRepository _chatRepository;
+  late final ChatMessageRepository _chatMessageRepository;
+  late final DeviceRepository _deviceRepository;
+  late final ClusterRepository _clusterRepository;
+  late final ClusterMemberRepository _clusterMemberRepository;
+  late final NearbyConnectionsBase _nearby;
 
   final String? _deviceUuid;
   final String? _clusterId;
@@ -38,23 +43,28 @@ class ChatViewModel extends ChangeNotifier {
   StreamSubscription? _messageRefreshSubscription;
 
   ChatViewModel({
-    required ChatRepository chatRepository,
-    required ChatMessageRepository chatMessageRepository,
-    required DeviceRepository deviceRepository,
-    required ClusterRepository clusterRepository,
-    required ClusterMemberRepository clusterMemberRepository,
-    required NearbyConnectionsBase nearby,
+    ChatRepository? chatRepository,
+    ChatMessageRepository? chatMessageRepository,
+    DeviceRepository? deviceRepository,
+    ClusterRepository? clusterRepository,
+    ClusterMemberRepository? clusterMemberRepository,
+    NearbyConnectionsBase? nearby,
     String? deviceUuid,
     String? clusterId,
     this.isGroupChat = false,
-  }) : _chatRepository = chatRepository,
-       _chatMessageRepository = chatMessageRepository,
-       _deviceRepository = deviceRepository,
-       _clusterRepository = clusterRepository,
-       _clusterMemberRepository = clusterMemberRepository,
-       _nearby = nearby,
-       _deviceUuid = deviceUuid,
-       _clusterId = clusterId {
+  })  : _deviceUuid = deviceUuid,
+        _clusterId = clusterId {
+    // Initialize repositories with provided instances or create defaults
+    final dbService = DBService();
+    _chatRepository = chatRepository ?? ChatRepositoryImpl(dbService);
+    _chatMessageRepository =
+        chatMessageRepository ?? ChatMessageRepositoryImpl(dbService);
+    _deviceRepository = deviceRepository ?? DeviceRepositoryImpl(dbService);
+    _clusterRepository = clusterRepository ?? ClusterRepositoryImpl(dbService);
+    _clusterMemberRepository =
+        clusterMemberRepository ?? ClusterMemberRepositoryImpl(dbService);
+    _nearby = nearby ?? NearbyConnectionsJoiner();
+
     _initialize();
     _nearby.addListener(_onNearbyStateChanged);
   }
